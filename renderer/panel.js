@@ -1,9 +1,12 @@
-import { REASONS } from './lib/strategies.mjs';
+import { findReason } from './lib/strategies.mjs';
+import { t, getLang, setLang, locale, translatePage } from './lib/i18n.mjs';
 
 const api = window.foco;
 const $ = (id) => document.getElementById(id);
 let snap = await api.invoke('state:get');
 let settingsLoaded = false;
+setLang(snap.config.language);
+translatePage();
 
 // ---------- Formato ----------
 
@@ -16,7 +19,7 @@ const clock = (ms) => {
   const s = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
-const hhmm = (ts) => new Date(ts).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
+const hhmm = (ts) => new Date(ts).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit', hour12: false });
 const host = (url) => {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
@@ -25,10 +28,18 @@ const host = (url) => {
   }
 };
 
-const REASON_LABEL = Object.fromEntries(
-  Object.entries(REASONS).flatMap(([flow, list]) => list.map((r) => [`${flow}:${r.id}`, r.label]))
-);
-const FLOW_LABEL = { stuck: 'Te trabaste', fiaca: 'Te dio fiaca', auto: 'Fue automático', false_alarm: 'Falsa alarma' };
+// "stuck:start" -> "No sé por dónde empezar", en el idioma actual.
+const reasonLabel = (key) => {
+  const [flow, id] = key.split(':');
+  return findReason(flow, id, getLang())?.label || id;
+};
+const FLOW_LABEL = {
+  stuck: 'Te trabaste',
+  fiaca: 'Te dio fiaca',
+  auto: 'Fue automático',
+  false_alarm: 'Falsa alarma',
+  told: 'Lo contaste',
+};
 
 const TIPS = {
   'stuck:start': 'Antes de cada bloque, escribí el primer paso concreto. Arrancar con eso ya definido baja mucho las escapadas.',
@@ -65,36 +76,37 @@ function renderToday() {
   const s = snap;
   const [cls, label] = STATUS[s.status];
   $('status-pill').className = `pill ${s.status === 'monitoring' && s.focusState !== 'focused' ? 'warn' : cls}`;
-  $('status-pill').lastElementChild.textContent = label;
-  $('status-detail').textContent = s.status === 'monitoring' ? FOCUS[s.focusState] || '' : '';
-  $('headline').textContent = s.config.currentTask ? s.config.currentTask : '¿En qué vas a trabajar?';
+  $('status-pill').lastElementChild.textContent = t(label);
+  $('status-detail').textContent = s.status === 'monitoring' ? t(FOCUS[s.focusState] || '') : '';
+  $('headline').textContent = s.config.currentTask ? s.config.currentTask : t('¿En qué vas a trabajar?');
 
   const manual = s.manualUntil > s.now;
-  $('btn-session').textContent = manual ? 'Terminar sesión de foco' : 'Empezar sesión (1 h)';
+  $('btn-session').textContent = manual ? t('Terminar sesión de foco') : t('Empezar sesión (1 h)');
   $('btn-session').hidden = s.status === 'monitoring' && !manual && !s.sprint;
-  $('btn-pause').textContent = s.status === 'paused' ? 'Reanudar' : 'Pausar 30 min';
+  $('btn-pause').textContent = s.status === 'paused' ? t('Reanudar') : t('Pausar 30 min');
 
   // No pisar la tarea mientras la estás escribiendo
   const editingTask = document.activeElement?.closest?.('#now-card') && !s.sprint && !s.breakInfo;
   if (!editingTask) renderNowCard();
 
-  const t = s.today;
-  const ev = t.events;
-  $('t-focus').textContent = duration(t.focusSeconds);
-  $('t-distracted').textContent = duration(t.distractedSeconds);
+  const today = s.today;
+  const ev = today.events;
+  $('t-focus').textContent = duration(today.focusSeconds);
+  $('t-distracted').textContent = duration(today.distractedSeconds);
   $('t-coach').textContent = ev.filter((e) => e.type === 'nudge' || (e.type === 'coach' && e.mode === 'trigger')).length;
   $('t-sprints').textContent = ev.filter((e) => e.type === 'sprint_end' && e.result === 'done').length;
 
   renderInsights(ev);
   renderTimeline(ev);
 
-  $('now-app').textContent = s.activity?.locked ? 'Pantalla bloqueada' : s.activity?.app || '–';
+  $('now-app').textContent = s.activity?.locked ? t('Pantalla bloqueada') : s.activity?.app || '–';
   $('now-url').textContent = s.activity?.url ? host(s.activity.url) : '–';
   const cam = s.config.camera.enabled ? s.attention?.status : 'off';
-  $('now-cam').textContent =
+  $('now-cam').textContent = t(
     { focused: 'Mirando la pantalla', looking_away: 'Mirando a otro lado', eyes_closed: 'Ojos cerrados', no_face: 'No te ve', off: 'Desactivada', unknown: 'Apagada' }[
       cam
-    ] || 'Esperando…';
+    ] || 'Esperando…'
+  );
 }
 
 function renderNowCard() {
@@ -113,34 +125,34 @@ function renderNowCard() {
     card.classList.add('sprint');
     const info = el('div', 'stack');
     info.style.gap = '2px';
-    info.append(el('span', 'muted small', 'Sprint en curso'), el('h2', '', s.sprint.goal));
-    if (s.sprint.reward) info.append(el('span', 'muted small', `Premio al terminar: ${s.sprint.reward}`));
-    card.append(el('div', 'clock', clock(s.sprint.until - s.now)), info, el('div', 'spacer'), btn('Cancelar', () => api.invoke('sprint:cancel').then(update)));
+    info.append(el('span', 'muted small', t('Sprint en curso')), el('h2', '', s.sprint.goal));
+    if (s.sprint.reward) info.append(el('span', 'muted small', t('Premio al terminar: {reward}', { reward: s.sprint.reward })));
+    card.append(el('div', 'clock', clock(s.sprint.until - s.now)), info, el('div', 'spacer'), btn(t('Cancelar'), () => api.invoke('sprint:cancel').then(update)));
     return;
   }
   if (s.breakInfo) {
     const info = el('div', 'stack');
     info.style.gap = '2px';
-    info.append(el('span', 'muted small', 'Corte en curso'), el('h2', '', s.breakInfo.activity || 'Corte'));
-    if (s.breakInfo.firstThing) info.append(el('span', 'muted small', `Al volver: ${s.breakInfo.firstThing}`));
-    card.append(el('div', 'clock', clock(s.breakInfo.until - s.now)), info, el('div', 'spacer'), btn('Terminar corte', () => api.invoke('break:end').then(update)));
+    info.append(el('span', 'muted small', t('Corte en curso')), el('h2', '', t(s.breakInfo.activity || 'Corte')));
+    if (s.breakInfo.firstThing) info.append(el('span', 'muted small', t('Al volver: {first}', { first: s.breakInfo.firstThing })));
+    card.append(el('div', 'clock', clock(s.breakInfo.until - s.now)), info, el('div', 'spacer'), btn(t('Terminar corte'), () => api.invoke('break:end').then(update)));
     return;
   }
 
   // Sin sprint: pedir la tarea del día
   const label = el('label', 'field');
   label.style.flex = '1';
-  label.append('¿En qué estás trabajando ahora?');
+  label.append(t('¿En qué estás trabajando ahora?'));
   const input = Object.assign(document.createElement('input'), {
     type: 'text',
-    placeholder: 'Ej: informe mensual de ventas',
+    placeholder: t('Ej: informe mensual de ventas'),
     value: s.config.currentTask || '',
   });
   const save = () => api.invoke('config:update', { currentTask: input.value.trim() }).then(update);
   input.addEventListener('keydown', (e) => e.key === 'Enter' && input.blur());
   input.addEventListener('change', save);
   label.append(input);
-  const hint = el('span', 'hint', 'El coach lo usa para ayudarte cuando te distraigas.');
+  const hint = el('span', 'hint', t('El coach lo usa para ayudarte cuando te distraigas.'));
   label.append(hint);
   card.append(label);
 }
@@ -161,45 +173,45 @@ function renderInsights(events) {
   };
 
   if (!answers.length && !events.some((e) => e.type === 'nudge')) {
-    add('Todavía no hubo distracciones hoy. Cuando aparezcan, acá vas a ver qué te frena y qué te tienta.', true);
+    add(t('Todavía no hubo distracciones hoy. Cuando aparezcan, acá vas a ver qué te frena y qué te tienta.'), true);
     return;
   }
   const reasons = count(answers, (a) => (a.flow === 'auto' ? 'auto' : a.reason ? `${a.flow}:${a.reason}` : null));
   if (reasons.length) {
     const [key, n] = reasons[0];
-    const label = key === 'auto' ? 'que fue automático' : `"${REASON_LABEL[key]}"`;
-    add(`Lo que más te frenó: ${label} (${n} ${n === 1 ? 'vez' : 'veces'}).`);
-    if (TIPS[key]) add(`💡 ${TIPS[key]}`);
+    const label = key === 'auto' ? t('que fue automático') : `"${reasonLabel(key)}"`;
+    add(t(n === 1 ? 'Lo que más te frenó: {label} ({n} vez).' : 'Lo que más te frenó: {label} ({n} veces).', { label, n }));
+    if (TIPS[key]) add(`💡 ${t(TIPS[key])}`);
   }
   const lures = count(
     events.filter((e) => e.type === 'nudge' || e.type === 'coach'),
     (e) => (e.trigger && (e.trigger.type === 'site' || e.trigger.type === 'app') ? e.trigger.label : null)
   );
-  if (lures.length) add(`Lo que más te tentó: ${lures[0][0]} (${lures[0][1]}).`);
+  if (lures.length) add(t('Lo que más te tentó: {label} ({n}).', { label: lures[0][0], n: lures[0][1] }));
 }
 
 function describe(e) {
   switch (e.type) {
     case 'nudge':
-      return `👀 Aviso: ${e.trigger?.label}`;
+      return t('👀 Aviso: {label}', { label: t(e.trigger?.label) });
     case 'coach':
-      return e.mode === 'manual' ? '🧭 Pediste ayuda al coach' : `🧭 Coach por ${e.trigger?.label}`;
+      return e.mode === 'manual' ? t('🧭 Pediste ayuda al coach') : t('🧭 Coach por {label}', { label: t(e.trigger?.label) });
     case 'answer':
-      return `💬 ${FLOW_LABEL[e.flow] || e.flow}${e.reason ? `: ${REASON_LABEL[`${e.flow}:${e.reason}`] || e.reason}` : ''}`;
+      return `💬 ${t(FLOW_LABEL[e.flow]) || e.flow}${e.reason ? `: ${reasonLabel(`${e.flow}:${e.reason}`)}` : ''}`;
     case 'sprint_start':
-      return `🎯 Sprint de ${e.minutes} min: ${e.goal}`;
+      return t('🎯 Sprint de {minutes} min: {goal}', { minutes: e.minutes, goal: e.goal });
     case 'sprint_end':
-      return { done: '✅ Sprint cumplido', partial: '🙂 Avanzaste en el sprint', stuck: '🧱 Te trabaste en el sprint' }[e.result];
+      return t({ done: '✅ Sprint cumplido', partial: '🙂 Avanzaste en el sprint', stuck: '🧱 Te trabaste en el sprint' }[e.result]);
     case 'sprint_cancel':
-      return '✖️ Sprint cancelado';
+      return t('✖️ Sprint cancelado');
     case 'break_start':
-      return `☕ Corte de ${e.minutes} min: ${e.activity}`;
+      return t('☕ Corte de {minutes} min: {activity}', { minutes: e.minutes, activity: t(e.activity) });
     case 'break_end':
-      return '↩️ Volviste del corte';
+      return t('↩️ Volviste del corte');
     case 'allow':
-      return '💼 Permitido por trabajo';
+      return t('💼 Permitido por trabajo');
     case 'coach_end':
-      return e.outcome === 'returned' ? '↩️ Volviste al foco' : null;
+      return e.outcome === 'returned' ? t('↩️ Volviste al foco') : null;
     default:
       return null;
   }
@@ -213,7 +225,7 @@ function renderTimeline(events) {
     .slice(-30)
     .reverse();
   if (!items.length) {
-    list.replaceChildren(Object.assign(document.createElement('li'), { className: 'empty', textContent: 'Nada todavía.' }));
+    list.replaceChildren(Object.assign(document.createElement('li'), { className: 'empty', textContent: t('Nada todavía.') }));
     return;
   }
   list.replaceChildren(
@@ -228,13 +240,13 @@ function renderTimeline(events) {
 async function renderWeek() {
   const week = await api.invoke('stats:week');
   const max = Math.max(30, ...week.map((d) => d.focusSeconds / 60));
-  const days = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+  const days = dayNames();
   $('week').replaceChildren(
     ...week.map((d, i) => {
       const mins = Math.round(d.focusSeconds / 60);
       const bar = document.createElement('div');
       bar.className = 'bar' + (i === week.length - 1 ? ' today' : '');
-      bar.title = `${d.date}: ${mins} min en foco`;
+      bar.title = t('{date}: {mins} min en foco', { date: d.date, mins });
       const fill = document.createElement('div');
       fill.className = 'fill';
       fill.style.height = `${(mins / max) * 80}%`;
@@ -248,7 +260,8 @@ async function renderWeek() {
 
 // ---------- Ajustes ----------
 
-const DAY_NAMES = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+// Iniciales de los días, empezando por el domingo (0).
+const dayNames = () => (getLang() === 'en' ? ['S', 'M', 'T', 'W', 'T', 'F', 'S'] : ['D', 'L', 'M', 'X', 'J', 'V', 'S']);
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 let selectedDays = new Set();
 
@@ -268,14 +281,14 @@ const parseBlocks = (text) =>
     })
     .filter((b) => /^\d{1,2}:\d{2}$/.test(b.start) && /^\d{1,2}:\d{2}$/.test(b.end));
 
-function loadSettings() {
-  const c = snap.config;
-  selectedDays = new Set(c.schedule.days);
+// Usa los días elegidos en pantalla (aunque todavía no se hayan guardado).
+function renderDays() {
+  const names = dayNames();
   $('days').replaceChildren(
     ...DAY_ORDER.map((d) => {
       const b = document.createElement('button');
       b.className = 'chip' + (selectedDays.has(d) ? ' on' : '');
-      b.textContent = DAY_NAMES[d];
+      b.textContent = names[d];
       b.onclick = () => {
         selectedDays.has(d) ? selectedDays.delete(d) : selectedDays.add(d);
         b.classList.toggle('on');
@@ -283,6 +296,12 @@ function loadSettings() {
       return b;
     })
   );
+}
+
+function loadSettings() {
+  const c = snap.config;
+  selectedDays = new Set(c.schedule.days);
+  renderDays();
   $('blocks').value = c.schedule.blocks.map((b) => `${b.start}-${b.end}`).join(', ');
   $('graceSeconds').value = c.graceSeconds;
   $('nudgeFirst').checked = c.nudgeFirst;
@@ -315,28 +334,30 @@ function loadSettings() {
 
 async function renderPermissions(status) {
   const st = status || (await api.invoke('perm:status'));
-  const label = (v) => (v === 'granted' || v === true ? '✓ dado' : v === 'denied' ? '✗ negado' : 'falta');
+  const label = (v) => t(v === 'granted' || v === true ? '✓ dado' : v === 'denied' ? '✗ negado' : 'falta');
   $('perm-accessibility').textContent = label(st.accessibility);
   $('perm-screen').textContent = label(st.screen);
   const v = st.voice;
   $('voice-status').textContent = v.ready
-    ? 'Modelo de voz listo ✓'
+    ? t('Modelo de voz listo ✓')
     : v.loading
-      ? `Descargando… ${v.progress ?? 0}%`
+      ? t('Descargando… {pct}%', { pct: v.progress ?? 0 })
       : v.downloaded
-        ? 'Modelo descargado ✓'
-        : 'El modelo se descarga la primera vez que hablás.';
+        ? t('Modelo descargado ✓')
+        : t('El modelo se descarga la primera vez que hablás.');
   $('btn-voice').hidden = v.downloaded || v.ready;
   $('btn-mic').hidden = st.microphone === 'granted';
 }
 
 function renderKeyStatus() {
   const { keySaved, envKey } = snap.ai;
-  $('key-status').textContent = keySaved
-    ? '🔒 Key guardada (cifrada en el llavero de tu Mac).'
-    : envKey
-      ? 'Usando ANTHROPIC_API_KEY del entorno.'
-      : 'Sin key: el coach usa el plan básico.';
+  $('key-status').textContent = t(
+    keySaved
+      ? '🔒 Key guardada (cifrada en el llavero de tu Mac).'
+      : envKey
+        ? 'Usando ANTHROPIC_API_KEY del entorno.'
+        : 'Sin key: el coach usa el plan básico.'
+  );
 }
 
 async function saveSettings() {
@@ -378,7 +399,7 @@ async function saveSettings() {
     voice: { enabled: $('voiceEnabled').checked },
   });
   loadSettings();
-  $('toast').textContent = 'Guardado ✓';
+  $('toast').textContent = t('Guardado ✓');
   setTimeout(() => ($('toast').textContent = ''), 2000);
   renderToday();
 }
@@ -394,12 +415,34 @@ function showTab(tab) {
 }
 
 function update(next) {
+  const prev = snap;
   if (next) snap = next;
+  const langChanged = snap.config.language !== getLang();
+  if (langChanged) applyLang(prev);
   renderToday();
   if (!settingsLoaded) loadSettings();
 }
 
+// Cambio de idioma (desde el botón ES/EN o desde el menú 🎯): se traduce todo sin perder lo que
+// estabas editando en Ajustes.
+function applyLang(prev) {
+  setLang(snap.config.language);
+  translatePage();
+  for (const b of document.querySelectorAll('[data-lang]')) b.classList.toggle('on', b.dataset.lang === getLang());
+  if (!settingsLoaded) return;
+  renderDays();
+  renderKeyStatus();
+  renderPermissions();
+  renderWeek();
+  // El menú de dopamina por defecto se traduce en el proceso principal; si no lo estabas editando, se actualiza.
+  if ($('dopamine').value === prev.config.dopamineMenu.join('\n')) $('dopamine').value = snap.config.dopamineMenu.join('\n');
+}
+
 for (const b of document.querySelectorAll('nav button')) b.onclick = () => showTab(b.dataset.tab);
+for (const b of document.querySelectorAll('[data-lang]')) {
+  b.classList.toggle('on', b.dataset.lang === getLang());
+  b.onclick = async () => b.dataset.lang !== getLang() && update(await api.invoke('config:update', { language: b.dataset.lang }));
+}
 $('btn-help').onclick = () => api.invoke('coach:open');
 $('btn-session').onclick = () => api.invoke(snap.manualUntil > Date.now() ? 'session:stop' : 'session:start', 60).then(update);
 $('btn-pause').onclick = () => api.invoke(snap.status === 'paused' ? 'resume' : 'pause', 30).then(update);
@@ -412,13 +455,13 @@ for (const b of document.querySelectorAll('[data-perm]')) {
 $('btn-mic').onclick = async () => renderPermissions(await api.invoke('perm:request', 'microphone'));
 $('btn-voice').onclick = async () => {
   $('btn-voice').disabled = true;
-  $('voice-status').textContent = 'Descargando…';
+  $('voice-status').textContent = t('Descargando…');
   const res = await api.invoke('voice:prepare');
   $('btn-voice').disabled = false;
   if (res.error) $('voice-status').textContent = res.error;
   renderPermissions();
 };
-api.on('voice:progress', (pct) => ($('voice-status').textContent = `Descargando el modelo de voz… ${pct}%`));
+api.on('voice:progress', (pct) => ($('voice-status').textContent = t('Descargando el modelo de voz… {pct}%', { pct })));
 $('btn-key').onclick = async () => {
   snap = await api.invoke('ai:setKey', $('apiKey').value);
   $('apiKey').value = '';

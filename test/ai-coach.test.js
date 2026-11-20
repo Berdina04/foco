@@ -117,3 +117,24 @@ test('ia: errores con mensajes claros', async () => {
     }
   );
 });
+
+test('ia: en inglés, el prompt y los errores también', async () => {
+  await withServer(
+    () => [200, message(JSON.stringify(PLAN))],
+    async ({ aiCoach }, seen) => {
+      await aiCoach({ apiKey: 'sk-ant-falsa', lang: 'en', input: { trigger: { type: 'gaze' } }, images: [Buffer.from('x')] });
+      const body = seen[0].body;
+      assert.match(body.system, /Respond in English/);
+      assert.doesNotMatch(body.system, /rioplatense/);
+      assert.equal(body.messages[0].content[0].text, 'Screenshot of the screen they were working on:');
+      assert.match(body.messages[0].content.at(-1).text, /^What triggered the alert: Hasn't looked at the screen/);
+    }
+  );
+  await withServer(
+    () => [401, { type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } }],
+    async ({ aiCoach }) => {
+      const res = await aiCoach({ apiKey: 'sk-ant-falsa', lang: 'en', input: {} });
+      assert.equal(res.error, 'The API key is not valid.');
+    }
+  );
+});

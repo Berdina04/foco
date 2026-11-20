@@ -44,6 +44,32 @@
         color: var(--text);
         border-bottom-color: var(--accent);
       }
+      .lang {
+        -webkit-app-region: no-drag;
+        margin-left: auto;
+        margin-bottom: 10px;
+        display: flex;
+        gap: 2px;
+        padding: 2px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--surface);
+      }
+      .lang button {
+        border: 0;
+        background: none;
+        padding: 3px 10px;
+        border-radius: 999px;
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 650;
+        letter-spacing: 0.03em;
+      }
+      .lang button.on {
+        background: var(--accent);
+        color: var(--accent-text);
+      }
       main {
         padding: 24px 28px 40px;
         max-width: 1040px;
@@ -229,6 +255,10 @@
         <button data-tab="hoy" class="on">Hoy</button>
         <button data-tab="ajustes">Ajustes</button>
       </nav>
+      <div class="lang" role="group" aria-label="Idioma">
+        <button data-lang="es" title="Español">ES</button>
+        <button data-lang="en" title="English">EN</button>
+      </div>
     </header>
 
     <main>

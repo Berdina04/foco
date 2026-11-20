@@ -2,7 +2,33 @@
 const fs = require('fs');
 const path = require('path');
 
+// Menú de dopamina por defecto en cada idioma. Si no lo editaste, cambia junto con el idioma.
+const DOPAMINE_MENU = {
+  es: [
+    '🚶 Caminar 5 minutos sin el celular',
+    '💧 Tomar agua o prepararme un café',
+    '🫁 Respiración guiada de 2 minutos',
+    '🤸 Estirar cuello, hombros y espalda',
+    '👀 Mirar por la ventana (regla 20-20-20)',
+    '✍️ Volcar la cabeza en un papel 3 minutos',
+    '🎵 Escuchar una canción con los ojos cerrados',
+  ],
+  en: [
+    '🚶 Walk for 5 minutes without my phone',
+    '💧 Drink some water or make a coffee',
+    '🫁 2-minute guided breathing',
+    '🤸 Stretch my neck, shoulders and back',
+    '👀 Look out the window (20-20-20 rule)',
+    '✍️ Brain-dump on paper for 3 minutes',
+    '🎵 Listen to a song with my eyes closed',
+  ],
+};
+
+const LANGUAGES = ['es', 'en'];
+
 const DEFAULTS = {
+  // Idioma de la interfaz, de la IA y de la voz: 'es' (español) | 'en' (inglés).
+  language: 'es',
   // Horario laboral: días (0 = domingo) y bloques HH:MM-HH:MM.
   schedule: {
     days: [1, 2, 3, 4, 5],
@@ -48,15 +74,7 @@ const DEFAULTS = {
     baselines: [],
   },
   // Menú de dopamina sana: cortes cortos que recargan sin secuestrar la atención.
-  dopamineMenu: [
-    '🚶 Caminar 5 minutos sin el celular',
-    '💧 Tomar agua o prepararme un café',
-    '🫁 Respiración guiada de 2 minutos',
-    '🤸 Estirar cuello, hombros y espalda',
-    '👀 Mirar por la ventana (regla 20-20-20)',
-    '✍️ Volcar la cabeza en un papel 3 minutos',
-    '🎵 Escuchar una canción con los ojos cerrados',
-  ],
+  dopamineMenu: DOPAMINE_MENU.es,
   ai: {
     enabled: false,
     model: 'claude-opus-5-5',
@@ -133,4 +151,18 @@ class ConfigStore {
   }
 }
 
-module.exports = { DEFAULTS, ConfigStore, deepMerge };
+/**
+ * Cambios de config para pasar a otro idioma: el idioma y, si no lo editaste, el menú de dopamina.
+ * @param {object} config  config actual
+ * @param {string} lang    'es' | 'en'
+ * @returns {object|null}  null si el idioma no es válido o ya es el actual
+ */
+function languageChange(config, lang) {
+  if (!LANGUAGES.includes(lang) || lang === config.language) return null;
+  const change = { language: lang };
+  const prevMenu = DOPAMINE_MENU[config.language] || DOPAMINE_MENU.es;
+  if (JSON.stringify(config.dopamineMenu) === JSON.stringify(prevMenu)) change.dopamineMenu = DOPAMINE_MENU[lang];
+  return change;
+}
+
+module.exports = { DEFAULTS, DOPAMINE_MENU, LANGUAGES, ConfigStore, deepMerge, languageChange };

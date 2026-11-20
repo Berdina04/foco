@@ -17,7 +17,8 @@ const {
 const fs = require('fs');
 const path = require('path');
 
-const { ConfigStore } = require('./config');
+const { ConfigStore, languageChange } = require('./config');
+const { translate } = require('./i18n');
 const { Stats } = require('./stats');
 const { FocusEngine } = require('./engine');
 const { classify } = require('./classifier');
@@ -122,6 +123,24 @@ function apiKey() {
 }
 
 const aiReady = () => config.get().ai.enabled && (!!apiKey() || !!process.env.ANTHROPIC_API_KEY);
+
+// ---------- Idioma ----------
+
+const lang = () => config.get().language;
+const t = (es, vars) => translate(lang(), es, vars);
+
+// Cambia el idioma de todo: ventanas abiertas, menú de la barra, IA y voz.
+function setLanguage(next) {
+  const change = languageChange(config.get(), next);
+  if (!change) return;
+  config.update(change);
+  lastMenuKey = '';
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send('lang', change.language);
+  }
+  updateTray();
+  broadcast();
+}
 
 function readApiKey() {
   try {
@@ -256,8 +275,10 @@ function nudge(trigger) {
   const task = config.get().currentTask;
   const body =
     trigger.type === 'gaze'
-      ? 'Hace un rato que no mirás la pantalla. ¿Volvemos?'
-      : `Estás en ${trigger.label}. ¿Volvemos${task ? ` a "${task}"` : ''}?`;
+      ? t('Hace un rato que no mirás la pantalla. ¿Volvemos?')
+      : task
+        ? t('Estás en {label}. ¿Volvemos a "{task}"?', { label: t(trigger.label), task })
+        : t('Estás en {label}. ¿Volvemos?', { label: t(trigger.label) });
   const n = new Notification({ title: '🎯 Foco', body });
   n.on('click', () => openCoach({ mode: 'trigger', trigger }));
   n.show();
@@ -277,7 +298,10 @@ function onEscalate(trigger) {
   state.alert.escalated = true;
   stats.log({ type: 'escalate', trigger });
   if (cfg.alerts.systemNotification) {
-    new Notification({ title: '🎯 Seguís fuera de foco', body: trigger.type === 'site' || trigger.type === 'app' ? `Estás en ${trigger.label}` : 'Volvamos' }).show();
+    new Notification({
+      title: t('🎯 Seguís fuera de foco'),
+      body: trigger.type === 'site' || trigger.type === 'app' ? t('Estás en {label}', { label: trigger.label }) : t('Volvamos'),
+    }).show();
   }
   pushToast();
 }
@@ -312,7 +336,10 @@ function showAlert(trigger, { gentle }) {
   openAlert(trigger, { gentle });
   stats.log({ type: gentle ? 'signal' : 'nudge', trigger });
   if (config.get().alerts.systemNotification && !gentle) {
-    new Notification({ title: '🎯 Fuera de foco', body: trigger.label ? `Estás en ${trigger.label}` : 'Volvamos' }).show();
+    new Notification({
+      title: t('🎯 Fuera de foco'),
+      body: trigger.label ? t('Estás en {label}', { label: t(trigger.label) }) : t('Volvamos'),
+    }).show();
   }
   showToast();
   // Irte a una distracción es una señal de que algo pasa: si hay IA, mira en qué estabas.
@@ -371,7 +398,7 @@ async function requestInsight({ transcript } = {}) {
   if (!a || !aiReady()) return;
   const cfg = config.get();
   const now = Date.now();
-  const key = a.work?.key || 'sin-contexto';
+  const key = `${lang()}|${a.work?.key || 'sin-contexto'}`; // la lectura cacheada está en un idioma
   if (!transcript && insightCache && insightCache.key === key && now - insightCache.at < 10 * 60_000) {
     a.insight = insightCache.insight;
     a.insightStatus = 'ready';
@@ -391,10 +418,11 @@ async function requestInsight({ transcript } = {}) {
   const res = await aiCoach({
     apiKey: apiKey(),
     model: cfg.ai.model,
+    lang: cfg.language,
     images,
     input: {
       trigger: a.trigger,
-      workSummary: work.summary(now),
+      workSummary: work.summary(now, cfg.language),
       task: cfg.currentTask,
       transcript,
       previous,
@@ -450,6 +478,7 @@ function toastPayload() {
     screen: cfg.context.readScreen && hasScreenPermission(),
     allowMinutes: cfg.allowMinutes,
     sound: cfg.alerts.sound,
+    lang: cfg.language,
     moment: a.moment
       ? {
           kind: a.moment,
@@ -533,7 +562,9 @@ const wantsNotification = () => windowStyle() || config.get().alerts.systemNotif
 function endSprint() {
   const sprint = state.sprint;
   state.sprint = null;
-  if (wantsNotification()) new Notification({ title: '⏰ Terminó el sprint', body: `¿Pudiste: ${sprint.goal}?` }).show();
+  if (wantsNotification()) {
+    new Notification({ title: t('⏰ Terminó el sprint'), body: t('¿Pudiste: {goal}?', { goal: sprint.goal }) }).show();
+  }
   if (windowStyle()) openCoach({ mode: 'checkin', sprint });
   else showMoment('sprint_end', sprint);
 }
@@ -551,8 +582,8 @@ function endBreak() {
   stats.log({ type: 'break_end' });
   if (wantsNotification()) {
     new Notification({
-      title: '☕ Fin del corte',
-      body: breakInfo.firstThing ? `Volvamos: ${breakInfo.firstThing}` : 'Volvamos al foco.',
+      title: t('☕ Fin del corte'),
+      body: breakInfo.firstThing ? t('Volvamos: {first}', { first: breakInfo.firstThing }) : t('Volvamos al foco.'),
     }).show();
   }
   if (windowStyle()) openCoach({ mode: 'break_end', breakInfo });
@@ -600,6 +631,7 @@ function coachContext() {
     allowMinutes: cfg.allowMinutes,
     aiEnabled: aiReady(),
     voice: cfg.voice.enabled,
+    lang: cfg.language,
   };
 }
 
@@ -674,8 +706,8 @@ async function ensureVision() {
     const ok = await systemPreferences.askForMediaAccess('camera');
     if (!ok) {
       new Notification({
-        title: 'Foco no tiene acceso a la cámara',
-        body: 'Activalo en Ajustes del Sistema → Privacidad y seguridad → Cámara.',
+        title: t('Foco no tiene acceso a la cámara'),
+        body: t('Activalo en Ajustes del Sistema → Privacidad y seguridad → Cámara.'),
       }).show();
       return;
     }
@@ -683,7 +715,7 @@ async function ensureVision() {
   visionWin = new BrowserWindow({
     width: 760,
     height: 640,
-    title: 'Cámara y calibración',
+    title: t('Cámara y calibración'),
     titleBarStyle: 'hiddenInset',
     show: false,
     webPreferences: { ...baseWebPrefs, backgroundThrottling: false },
@@ -764,40 +796,46 @@ function updateTray() {
   else if (state.sprint) title = `🎯 ${fmt(state.sprint.until - now)}`;
   else if ((state.alert && !state.alert.moment) || state.focusState === 'distracted' || state.focusState === 'looking_away') title = '👀';
   tray.setTitle(title);
-  tray.setToolTip(state.sprint ? `Sprint: ${state.sprint.goal}` : 'Foco');
+  tray.setToolTip(state.sprint ? t('Sprint: {goal}', { goal: state.sprint.goal }) : 'Foco');
 
-  const menuKey = [status, !!state.sprint, state.manualUntil > now, !!state.breakInfo, cameraMode].join('|');
+  const menuKey = [status, !!state.sprint, state.manualUntil > now, !!state.breakInfo, cameraMode, lang()].join('|');
   if (menuKey === lastMenuKey) return;
   lastMenuKey = menuKey;
 
-  const label = {
-    monitoring: state.sprint ? 'En sprint de foco' : 'Monitoreando el foco',
-    paused: 'En pausa',
-    break: 'En un corte',
-    off: 'Fuera de horario',
-  }[status];
+  const label = t(
+    {
+      monitoring: state.sprint ? 'En sprint de foco' : 'Monitoreando el foco',
+      paused: 'En pausa',
+      break: 'En un corte',
+      off: 'Fuera de horario',
+    }[status]
+  );
   const items = [
     { label, enabled: false },
     { type: 'separator' },
-    { label: 'Abrir panel', click: () => openPanel() },
-    { label: 'Me trabé, ayudame', click: () => openCoach({ mode: 'manual' }) },
+    { label: t('Abrir panel'), click: () => openPanel() },
+    { label: t('Me trabé, ayudame'), click: () => openCoach({ mode: 'manual' }) },
     { type: 'separator' },
   ];
   if (state.manualUntil > now) {
-    items.push({ label: 'Terminar sesión de foco', click: () => ((state.manualUntil = 0), tick()) });
+    items.push({ label: t('Terminar sesión de foco'), click: () => ((state.manualUntil = 0), tick()) });
   } else if (status === 'off') {
-    items.push({ label: 'Empezar sesión de foco (1 h)', click: () => ((state.manualUntil = now + 3_600_000), tick()) });
+    items.push({ label: t('Empezar sesión de foco (1 h)'), click: () => ((state.manualUntil = now + 3_600_000), tick()) });
   }
-  if (state.breakInfo) items.push({ label: 'Terminar el corte ahora', click: () => endBreak() });
-  if (status === 'paused') items.push({ label: 'Reanudar', click: () => ((state.pausedUntil = 0), tick()) });
-  else items.push({ label: 'Pausar 30 min', click: () => ((state.pausedUntil = now + 1_800_000), tick()) });
+  if (state.breakInfo) items.push({ label: t('Terminar el corte ahora'), click: () => endBreak() });
+  if (status === 'paused') items.push({ label: t('Reanudar'), click: () => ((state.pausedUntil = 0), tick()) });
+  else items.push({ label: t('Pausar 30 min'), click: () => ((state.pausedUntil = now + 1_800_000), tick()) });
   items.push(
     { type: 'separator' },
     cameraMode === 'mini'
-      ? { label: 'Ocultar cámara flotante', click: () => hideCamera() }
-      : { label: 'Cámara flotante', click: () => showCamera('mini') },
-    { label: 'Cámara y calibración', click: () => showCamera('full') },
-    { label: 'Salir de Foco', click: () => app.quit() }
+      ? { label: t('Ocultar cámara flotante'), click: () => hideCamera() }
+      : { label: t('Cámara flotante'), click: () => showCamera('mini') },
+    { label: t('Cámara y calibración'), click: () => showCamera('full') },
+    // Cada idioma se nombra en su propio idioma, para que lo encuentre quien no entiende el otro.
+    lang() === 'en'
+      ? { label: '🌐 Español', click: () => setLanguage('es') }
+      : { label: '🌐 English', click: () => setLanguage('en') },
+    { label: t('Salir de Foco'), click: () => app.quit() }
   );
   tray.setContextMenu(Menu.buildFromTemplate(items));
 }
@@ -809,7 +847,9 @@ function registerIpc() {
   ipcMain.handle('stats:week', () => stats.week());
 
   ipcMain.handle('config:update', async (_e, partial) => {
-    config.update(partial);
+    const { language, ...rest } = partial || {};
+    config.update(rest);
+    if (language) setLanguage(language);
     if (partial?.camera) {
       await ensureVision();
       visionWin?.webContents.send('vision:config', config.get().camera);
@@ -880,11 +920,12 @@ function registerIpc() {
     return aiCoach({
       apiKey: apiKey(),
       model: cfg.ai.model,
+      lang: cfg.language,
       images,
       input: {
         ...input,
         trigger: state.coach?.trigger,
-        workSummary: work.summary(now),
+        workSummary: work.summary(now, cfg.language),
         task: input.task || cfg.currentTask,
         dopamineMenu: cfg.dopamineMenu,
       },
@@ -942,7 +983,7 @@ function registerIpc() {
   ipcMain.handle('toast:reward', () => {
     const a = state.alert;
     if (a?.moment !== 'sprint_end') return;
-    startBreak({ activity: a.info.reward || 'Premio', minutes: 5, firstThing: '' });
+    startBreak({ activity: a.info.reward || t('Premio'), minutes: 5, firstThing: '' });
     resolveAlert('break');
   });
   ipcMain.handle('toast:step', (_e, { goal, minutes } = {}) => {
@@ -969,7 +1010,7 @@ function registerIpc() {
       return { text };
     } catch (err) {
       console.error('voz:', err);
-      return { error: 'No pude pasar el audio a texto. ¿Hay conexión para descargar el modelo la primera vez?' };
+      return { error: t('No pude pasar el audio a texto. ¿Hay conexión para descargar el modelo la primera vez?') };
     }
   });
   ipcMain.handle('voice:status', () => voice.status(voiceOptions()));
@@ -978,7 +1019,7 @@ function registerIpc() {
       await voice.load(voiceOptions());
     } catch (err) {
       console.error('voz:', err);
-      return { ...voice.status(voiceOptions()), error: 'No se pudo descargar el modelo de voz.' };
+      return { ...voice.status(voiceOptions()), error: t('No se pudo descargar el modelo de voz.') };
     }
     return voice.status(voiceOptions());
   });
@@ -1012,7 +1053,7 @@ function registerIpc() {
   // Cámara
   ipcMain.handle('camera:show', (_e, mode) => showCamera(mode === 'mini' ? 'mini' : 'full'));
   ipcMain.handle('camera:hide', () => hideCamera());
-  ipcMain.handle('camera:config', () => ({ ...config.get().camera, active: wantCamera(), preview: cameraMode }));
+  ipcMain.handle('camera:config', () => ({ ...config.get().camera, active: wantCamera(), preview: cameraMode, lang: lang() }));
   ipcMain.handle('camera:baselines', (_e, baselines) => {
     config.update({ camera: { baselines } });
     visionWin?.webContents.send('vision:config', config.get().camera);
@@ -1027,6 +1068,7 @@ function voiceOptions() {
   return {
     cacheDir: path.join(app.getPath('userData'), 'voice-models'),
     model: config.get().voice.model,
+    language: lang() === 'en' ? 'english' : 'spanish',
     onProgress: (pct) => {
       for (const w of BrowserWindow.getAllWindows()) w.webContents.send('voice:progress', pct);
     },

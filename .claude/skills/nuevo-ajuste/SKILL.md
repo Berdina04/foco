@@ -12,6 +12,7 @@ Los ajustes viven en `config.json` dentro de userData. `ConfigStore` (`src/confi
 - Ubicalo en el grupo que corresponda: `schedule`, `camera`, `alerts`, `context`, `signals`, `voice`, `ai`, o arriba de todo si es general (`graceSeconds`, `allowMinutes`…).
 - Poné la unidad en el nombre (`…Seconds`, `…Minutes`) y un comentario en español arriba que explique qué hace y qué significa `0` si aplica ("0 = no avisar").
 - Elegí un valor por defecto que funcione bien para alguien que nunca abre Ajustes.
+- Si el valor por defecto es un texto que ve la persona (como el menú de dopamina), necesita una versión por idioma, como `DOPAMINE_MENU.es` / `.en`, y decidir qué pasa al cambiar de idioma en `languageChange()`: hoy el menú sólo se traduce si la persona no lo editó.
 
 ## 2. Campo en Ajustes (`renderer/panel.html`)
 
@@ -36,6 +37,8 @@ Buscá la tarjeta (`<div class="card stack">` con su `<h2>`) que corresponde y s
 ```
 
 El `id` del campo es el nombre de la clave. Poné `min` y `max` razonables en los números. El texto tiene que entenderse sin conocer el código (skill `escribir-textos`).
+
+Los textos fijos del HTML se traducen solos con `translatePage()`, pero sólo si están en el `EN` de `renderer/lib/i18n.mjs`. Sumá ahí cada texto nuevo tal como queda en el HTML, con los espacios juntados en uno (la etiqueta, la unidad, la aclaración, las opciones del `<select>`, el `placeholder`). El test `idioma: todos los textos fijos de las ventanas tienen traducción` te dice cuál falta.
 
 ## 3. Cargar y guardar (`renderer/panel.js`)
 
@@ -66,4 +69,4 @@ Un ajuste nuevo, en cambio, le llega a todos con su valor por defecto gracias al
 ## 7. Cerrar
 
 - Si a quien usa la app le sirve saberlo, agregalo a "Ajustes que vale la pena conocer" en el README.
-- Corré `npm test` y `npm run smoke` (skill `verificar-ui`). `02-panel-ajustes.png` muestra sólo lo que entra en la ventana; si tu campo queda más abajo, confirmá en `02-panel-ajustes.txt` que aparece con el texto correcto.
+- Corré `npm test` y `npm run smoke` (skill `verificar-ui`). `02-panel-ajustes.png` muestra sólo lo que entra en la ventana; si tu campo queda más abajo, confirmá en `02-panel-ajustes.txt` que aparece con el texto correcto, y en `23-panel-ajustes-ingles.txt` que aparece traducido.

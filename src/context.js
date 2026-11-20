@@ -86,12 +86,18 @@ class WorkContext {
     return top && now - top.at < maxAgeMs ? top : null;
   }
 
-  /** Resumen para la IA: "VS Code — engine.js (12 min, hace 1 min)". */
-  summary(now) {
+  /**
+   * Resumen para la IA: "VS Code — engine.js (12 min, hace 1 min)".
+   * @param {number} now
+   * @param {string} [lang]  'es' | 'en' ("12 min, 1 min ago")
+   */
+  summary(now, lang = 'es') {
     return this.recent.map((r) => {
       const mins = Math.max(1, Math.round(r.seconds / 60));
       const ago = Math.round((now - r.at) / 60_000);
-      return `${r.label} (${mins} min${ago > 0 ? `, hace ${ago} min` : ', recién'})`;
+      const when =
+        lang === 'en' ? (ago > 0 ? `, ${ago} min ago` : ', just now') : ago > 0 ? `, hace ${ago} min` : ', recién';
+      return `${r.label} (${mins} min${when})`;
     });
   }
 }

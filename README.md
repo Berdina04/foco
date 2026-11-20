@@ -93,6 +93,7 @@ En modo desarrollo macOS muestra estos permisos a nombre de **"Electron"**. Desp
 - **Sólo sin teclado ni mouse** (activado por defecto): mirar el teclado o un papel mientras escribís no cuenta como distracción.
 - **Sensibilidad de la cámara**: si te avisa de más, bajala o recalibrá.
 - **Menú de dopamina**: editalo con lo que a vos te recarga de verdad.
+- **Idioma**: el botón **ES | EN** arriba a la derecha del panel (o 🌐 en el menú 🎯) pasa toda la app al inglés: ventanas, avisos, notificaciones, el coach con IA y la voz. Si no editaste el menú de dopamina, también se traduce.
 
 ## Desarrollo
 

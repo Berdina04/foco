@@ -2,6 +2,7 @@
 // Corre con backgroundThrottling desactivado para seguir funcionando aunque no se vea.
 import { FaceLandmarker, FilesetResolver } from '../node_modules/@mediapipe/tasks-vision/vision_bundle.mjs';
 import { headPose, gazeFromBlendshapes, classifyAttention, smooth, averagePose } from './lib/attention.mjs';
+import { t, setLang, translatePage } from './lib/i18n.mjs';
 
 const PROCESS_EVERY_MS = 200; // ~5 análisis por segundo alcanzan y ahorran batería
 const SEND_EVERY_MS = 500;
@@ -22,6 +23,8 @@ const LABELS = {
 };
 
 let camera = await window.foco.invoke('camera:config');
+setLang(camera.lang);
+translatePage();
 let landmarker = null;
 let stream = null;
 let running = false;
@@ -83,11 +86,11 @@ async function readFrames(track) {
   while (running) {
     const { value: frame, done } = await reader.read();
     if (done) break;
-    const t = performance.now();
-    if (t - lastProcessed >= PROCESS_EVERY_MS) {
-      lastProcessed = t;
+    const now = performance.now();
+    if (now - lastProcessed >= PROCESS_EVERY_MS) {
+      lastProcessed = now;
       try {
-        analyze(frame, t);
+        analyze(frame, now);
       } catch (err) {
         console.error(err);
       }
@@ -111,9 +114,9 @@ function stopCamera() {
 
 // ---------- Análisis ----------
 
-function analyze(source, t) {
+function analyze(source, now) {
   if (!landmarker) return;
-  const res = landmarker.detectForVideo(source, t);
+  const res = landmarker.detectForVideo(source, now);
   let m = null;
   if (res.faceLandmarks?.length) {
     const pose = headPose(res.facialTransformationMatrixes?.[0]?.data);
@@ -130,10 +133,10 @@ function analyze(source, t) {
     status = 'no_face';
   }
 
-  if (calibration && t >= calibration.until) finishCalibration();
+  if (calibration && now >= calibration.until) finishCalibration();
 
-  if (t - lastSent >= SEND_EVERY_MS) {
-    lastSent = t;
+  if (now - lastSent >= SEND_EVERY_MS) {
+    lastSent = now;
     window.foco.sendAttention({ status, metrics: smoothed && round(smoothed) });
   }
   if (previewMode) draw(res);
@@ -147,7 +150,7 @@ function setStatus(key) {
   const [cls, text] = LABELS[key] || LABELS.no_face;
   for (const el of [$('status'), $('hud-status')]) {
     el.className = `pill ${cls}`;
-    el.lastElementChild.textContent = calibration ? 'Calibrando… mirá la pantalla' : text;
+    el.lastElementChild.textContent = t(calibration ? 'Calibrando… mirá la pantalla' : text);
   }
   renderHud();
 }
@@ -160,23 +163,23 @@ function renderHud() {
   let progress = null;
   const e = engine;
 
-  if (!running) text = 'Cámara apagada';
+  if (!running) text = t('Cámara apagada');
   else if (!e || e.status !== 'monitoring') {
-    text = { paused: 'En pausa: no avisa', break: 'En un corte: no avisa', off: 'Fuera de horario: no avisa' }[e?.status] || '';
+    text = t({ paused: 'En pausa: no avisa', break: 'En un corte: no avisa', off: 'Fuera de horario: no avisa' }[e?.status] || '');
   } else if (e.screenLabel) {
-    text = `Distracción en pantalla: ${e.screenLabel}`;
+    text = t('Distracción en pantalla: {label}', { label: e.screenLabel });
     progress = e.screenSeconds / e.graceSeconds;
   } else if (status === 'looking_away') {
     if (e.gazeSeconds > 0) {
-      text = `Mirando a otro lado · aviso en ${Math.max(0, Math.ceil(e.gazeLimit - e.gazeSeconds))} s`;
+      text = t('Mirando a otro lado · aviso en {s} s', { s: Math.max(0, Math.ceil(e.gazeLimit - e.gazeSeconds)) });
       progress = e.gazeSeconds / e.gazeLimit;
-    } else if (e.typing) text = 'Estás usando teclado o mouse: no cuenta';
-    else text = 'Mirando a otro lado…';
+    } else if (e.typing) text = t('Estás usando teclado o mouse: no cuenta');
+    else text = t('Mirando a otro lado…');
   } else if (status === 'eyes_closed') {
-    text = 'Ojos cerrados';
+    text = t('Ojos cerrados');
     if (e.eyesClosedSeconds > 0) progress = e.eyesClosedSeconds / e.drowsyLimit;
   } else if (status === 'no_face') {
-    text = 'No te veo: no cuenta como distracción';
+    text = t('No te veo: no cuenta como distracción');
   }
 
   $('hud-text').textContent = text;
@@ -237,7 +240,7 @@ async function finishCalibration() {
   calibration = null;
   $('calibrate').disabled = $('add-screen').disabled = false;
   if (samples.length < 5) {
-    $('calib-info').textContent = 'No te vi bien. Acercate a la cámara y probá de nuevo.';
+    $('calib-info').textContent = t('No te vi bien. Acercate a la cámara y probá de nuevo.');
     return;
   }
   const pose = averagePose(samples);
@@ -248,8 +251,8 @@ async function finishCalibration() {
 function renderCalibInfo() {
   const n = camera.baselines?.length || 0;
   $('calib-info').textContent = n
-    ? `${n} ${n === 1 ? 'pantalla calibrada' : 'pantallas calibradas'}`
-    : 'Sin calibrar (usa valores por defecto)';
+    ? t(n === 1 ? '{n} pantalla calibrada' : '{n} pantallas calibradas', { n })
+    : t('Sin calibrar (usa valores por defecto)');
   $('sensitivity').value = camera.sensitivity || 'media';
 }
 
@@ -282,6 +285,12 @@ window.foco.on('vision:active', (active) => {
 window.foco.on('vision:engine', (info) => {
   engine = info;
   if (previewMode) renderHud();
+});
+window.foco.on('lang', (lang) => {
+  setLang(lang);
+  translatePage();
+  renderCalibInfo();
+  setStatus(running ? status : 'off');
 });
 
 renderCalibInfo();

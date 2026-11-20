@@ -1,5 +1,5 @@
 // Prueba de humo: arranca la app con datos temporales (sin cámara ni monitoreo, así no pide permisos),
-// recorre el panel, el coach y el aviso flotante (distracción, fin de sprint y fin de corte),
+// recorre el panel, el coach y el aviso flotante (distracción, fin de sprint y fin de corte), el cambio de idioma,
 // guarda capturas y el texto de cada pantalla, y sale.
 //   npm run smoke  ->  capturas en ./smoke-output
 // Opcional: FOCO_SMOKE_WAV=audio.wav (16 kHz mono) y FOCO_SMOKE_VOICE_CACHE=carpeta del modelo para probar la voz.
@@ -313,7 +313,49 @@ app.whenReady().then(async () => {
     await wait(800);
     foco.config().update({ alerts: { style: 'toast' } });
 
-    const final = await panel.webContents.executeJavaScript("window.foco.invoke('state:get')");
+    // 9. Botón ES/EN: el panel, el aviso y el coach en inglés, y vuelta al español con el coach abierto
+    const textOf = (win) => win.webContents.executeJavaScript('document.body.innerText');
+    const expectIn = async (win, part, what) => {
+      const text = await textOf(win);
+      if (!text.includes(part)) throw new Error(`${what}: no dice "${part}". Dice: ${JSON.stringify(text.slice(0, 400))}`);
+    };
+    await click(panel, '[data-lang="en"]');
+    await wait(600);
+    await expectIn(panel, 'Today', 'Panel en inglés');
+    await expectIn(panel, 'What happened today', 'Panel en inglés');
+    if (foco.config().get().language !== 'en') throw new Error('El botón EN no guardó el idioma');
+    if (!foco.config().get().dopamineMenu[0].includes('Walk')) throw new Error('El menú de dopamina no pasó al inglés');
+    await shot(panel, '22-panel-ingles');
+    await click(panel, 'Settings');
+    await expectIn(panel, 'Work hours', 'Ajustes en inglés');
+    await shot(panel, '23-panel-ajustes-ingles');
+    await click(panel, 'Today');
+
+    foco.showAlert({ type: 'site', key: 'site:instagram.com', label: 'instagram.com' }, { gentle: false });
+    await waitInsight();
+    await expectIn(toast, 'Out of focus', 'Aviso en inglés');
+    await expectIn(toast, "You're on instagram.com", 'Aviso en inglés');
+    await shot(toast, '24-aviso-ingles');
+    await toast.webContents.executeJavaScript("window.foco.invoke('toast:dismiss')");
+
+    await panel.webContents.executeJavaScript("window.foco.invoke('coach:open')");
+    await wait(1500);
+    const coach4 = byUrl('coach.html');
+    if (!coach4) throw new Error('No se abrió el coach en inglés');
+    await expectIn(coach4, "What's going on?", 'Coach en inglés');
+    await click(coach4, "I'm stuck on something");
+    await expectIn(coach4, 'Where did you get stuck?', 'Coach en inglés');
+    await shot(coach4, '25-coach-ingles');
+    await click(panel, '[data-lang="es"]');
+    await wait(600);
+    await expectIn(coach4, '¿Dónde te trabaste?', 'Coach al volver al español');
+    await expectIn(panel, 'Qué pasó hoy', 'Panel al volver al español');
+    if (!foco.config().get().dopamineMenu[0].includes('Caminar')) throw new Error('El menú de dopamina no volvió al español');
+    console.log('✓ idioma: ES → EN → ES en panel, aviso y coach');
+    coach4.webContents.executeJavaScript("window.foco.invoke('coach:close')").catch(() => {});
+    await wait(800);
+
+    const final =await panel.webContents.executeJavaScript("window.foco.invoke('state:get')");
     console.log('✓ eventos registrados:', final.today.events.map((e) => e.type).join(', '));
   } catch (err) {
     errors.push('SMOKE: ' + err.message);

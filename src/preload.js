@@ -46,7 +46,18 @@ const INVOKE = new Set([
   'perm:status',
   'perm:request',
 ]);
-const EVENTS = new Set(['state', 'panel:tab', 'coach:context', 'vision:preview', 'vision:config', 'vision:active', 'vision:engine', 'toast:update', 'voice:progress']);
+const EVENTS = new Set([
+  'state',
+  'panel:tab',
+  'coach:context',
+  'vision:preview',
+  'vision:config',
+  'vision:active',
+  'vision:engine',
+  'toast:update',
+  'voice:progress',
+  'lang',
+]);
 
 contextBridge.exposeInMainWorld('foco', {
   invoke(channel, ...args) {

@@ -5,7 +5,14 @@ const path = require('path');
 
 const SAMPLE_RATE = 16000;
 // Frases que Whisper inventa cuando escucha silencio o ruido.
-const HALLUCINATIONS = [/amara\.org/i, /subt[ií]tulos/i, /gracias por ver/i, /suscr[ií]bete/i, /^\W*$/];
+const HALLUCINATIONS = [
+  /amara\.org/i,
+  /subt[ií]tulos/i,
+  /gracias por ver/i,
+  /suscr[ií]bete/i,
+  /thanks? (you )?for watching/i,
+  /^\W*$/,
+];
 
 let asr = null;
 let loading = null;
@@ -64,12 +71,15 @@ function rms(pcm) {
   return Math.sqrt(sum / Math.max(1, pcm.length));
 }
 
-/** @param {Float32Array} pcm  audio mono a 16 kHz */
+/**
+ * @param {Float32Array} pcm  audio mono a 16 kHz
+ * @param {{cacheDir:string, model:string, language?:'spanish'|'english', onProgress?:(pct:number)=>void}} opts
+ */
 async function transcribe(pcm, opts) {
   if (!pcm || pcm.length < SAMPLE_RATE * 0.4) return '';
   if (rms(pcm) < 0.004) return ''; // silencio
   const model = await load(opts);
-  const out = await model(pcm, { language: 'spanish', task: 'transcribe' });
+  const out = await model(pcm, { language: opts.language || 'spanish', task: 'transcribe' });
   const text = String(out?.text || '').trim();
   return HALLUCINATIONS.some((re) => re.test(text)) ? '' : text;
 }

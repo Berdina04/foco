@@ -35,13 +35,14 @@ Pasá el dato con un nombre claro y documentalo en el JSDoc de `tick()`.
 - Los umbrales van en la config (`config.signals`, `config.camera`…), con un valor por defecto razonable. Para exponerlos en Ajustes, seguí la skill `nuevo-ajuste`.
 - Si la señal no debería repetirse mientras la situación sigue igual, usá un flag como `stareFired`, que se reinicia cuando la persona vuelve a tocar algo.
 
-## 4. Textos
+## 4. Textos (en español y en inglés)
 
-- `renderer/toast.js` → `HEAD[type]`: `[emoji, título, subtítulo]`. Sin esto cae en `HEAD.manual` ("¿Qué está pasando?").
-- `src/ai-coach.js` → `TRIGGER_TEXT[type]`: describe en tercera persona qué pasó, para la IA. Sin esto cae en "Pidió ayuda por su cuenta", que la confunde.
-- `src/main.js`: con el estilo "ventana", `nudge()` arma el texto de la notificación (sólo `gaze` tiene un texto propio; el resto usa `Estás en ${label}`) y `onEscalate()` arma la notificación que insiste. Fijate que tengan sentido para tu tipo.
-- `renderer/panel.js`: la línea de tiempo usa `trigger.label` y "Lo que más te tentó" sólo cuenta `site` y `app`. Decidí si tu tipo tiene que sumarse ahí.
-- Todo con la voz de la app (skill `escribir-textos`).
+- `renderer/toast.js` → `HEAD[type]`: `[emoji, título, subtítulo]`, cada texto con `t('…')`. Sin esto cae en `HEAD.manual` ("¿Qué está pasando?").
+- `src/ai-coach.js` → `COPY.es.trigger[type]` **y** `COPY.en.trigger[type]`: describe en tercera persona qué pasó, para la IA. Sin esto cae en "Pidió ayuda por su cuenta", que la confunde.
+- El `label` del trigger queda en español en el engine y se traduce al mostrarlo. Sumalo al `EN` de `src/i18n.js` (notificaciones) **y** al de `renderer/lib/i18n.mjs` (línea de tiempo del panel). Los tests de idioma no revisan `engine.js`, así que no te van a avisar si falta.
+- `src/main.js`: con el estilo "ventana", `nudge()` arma el texto de la notificación (sólo `gaze` tiene un texto propio; el resto usa `Estás en {label}`) y `onEscalate()` arma la notificación que insiste. Fijate que tengan sentido para tu tipo, en los dos idiomas.
+- `renderer/panel.js`: la línea de tiempo usa `t(trigger.label)` y "Lo que más te tentó" sólo cuenta `site` y `app`. Decidí si tu tipo tiene que sumarse ahí.
+- Todo texto nuevo pasa por `t()` y lleva su entrada en el `EN` que corresponda, con la voz de la app (skill `escribir-textos`).
 
 ## 5. Capturas para la IA
 
@@ -55,10 +56,10 @@ En `test/logic.test.js`, con `now` simulado en milisegundos y el helper `engineC
 - No dispara con `paused: true` ni durante el cooldown.
 - Una distracción en pantalla le gana.
 - Si es una señal: respeta el cooldown y no se repite mientras no cambie nada.
-- `buildPrompt` incluye el texto nuevo de `TRIGGER_TEXT`.
+- `buildPrompt(input)` y `buildPrompt(input, 'en')` incluyen el texto nuevo de `COPY.*.trigger`.
 
 ## 7. Smoke, README y verificación
 
-- Sumá un paso en `scripts/smoke.js` que llame a `foco.showAlert({ type, key, label }, { gentle })` y saque una captura (skill `verificar-ui`).
+- Sumá un paso en `scripts/smoke.js` que llame a `foco.showAlert({ type, key, label }, { gentle })` y saque una captura (skill `verificar-ui`). Si podés, mirá también cómo queda en inglés.
 - Agregalo a "Qué detecta" en el README y, si suma un ajuste, a "Ajustes que vale la pena conocer".
 - Corré `npm test` y `npm run smoke`.

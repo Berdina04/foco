@@ -1,4 +1,6 @@
 // Graba del micrófono y devuelve audio mono a 16 kHz, que es lo que necesita Whisper.
+import { t } from './i18n.mjs';
+
 export class Recorder {
   constructor({ onLevel } = {}) {
     this.onLevel = onLevel;
@@ -79,7 +81,7 @@ export function micButton(button, { onText, onState = () => {} }) {
       const pcm = await current.stop();
       const res = await window.foco.invoke('voice:transcribe', pcm);
       if (res.error) onState('error', res.error);
-      else if (!res.text) onState('error', 'No escuché nada. Probá de nuevo, un poco más cerca.');
+      else if (!res.text) onState('error', t('No escuché nada. Probá de nuevo, un poco más cerca.'));
       else {
         onState('done');
         onText(res.text);
@@ -95,16 +97,16 @@ export function micButton(button, { onText, onState = () => {} }) {
   button.addEventListener('click', async () => {
     if (rec) return finish();
     const ok = await window.foco.invoke('mic:ensure');
-    if (!ok) return onState('error', 'Foco no tiene permiso para usar el micrófono (Ajustes del Sistema → Privacidad → Micrófono).');
+    if (!ok) return onState('error', t('Foco no tiene permiso para usar el micrófono (Ajustes del Sistema → Privacidad → Micrófono).'));
     rec = new Recorder({ onLevel: (l) => onState('level', l) });
     try {
       await rec.start();
     } catch (err) {
       rec = null;
-      return onState('error', 'No pude abrir el micrófono.');
+      return onState('error', t('No pude abrir el micrófono.'));
     }
     button.classList.add('recording');
-    button.textContent = '■ Listo';
+    button.textContent = t('■ Listo');
     onState('listening');
     timeout = setTimeout(finish, 45_000);
   });

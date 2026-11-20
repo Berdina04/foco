@@ -199,3 +199,58 @@ test('ia: fin de sprint o de corte le dice a la IA en qué se trabó', () => {
   assert.match(buildPrompt({ trigger: { type: 'break_end', label: 'responder a Ana' } }), /corte.*responder a Ana/);
   assert.match(buildPrompt({ trigger: { type: 'break_end', label: '' } }), /le cuesta arrancar$/m);
 });
+
+// ---------- Idioma ----------
+
+const fs = require('node:fs');
+const path = require('node:path');
+const { DOPAMINE_MENU, languageChange } = require('../src/config');
+const { translate, EN: EN_MAIN } = require('../src/i18n');
+
+test('idioma: cambiar de idioma traduce el menú de dopamina sólo si no lo editaste', () => {
+  const base = deepMerge(DEFAULTS, {});
+  assert.deepEqual(languageChange(base, 'en'), { language: 'en', dopamineMenu: DOPAMINE_MENU.en });
+  const edited = deepMerge(DEFAULTS, { dopamineMenu: ['🧘 Meditar'] });
+  assert.deepEqual(languageChange(edited, 'en'), { language: 'en' });
+  const english = deepMerge(DEFAULTS, { language: 'en', dopamineMenu: DOPAMINE_MENU.en });
+  assert.deepEqual(languageChange(english, 'es'), { language: 'es', dopamineMenu: DOPAMINE_MENU.es });
+  assert.equal(languageChange(base, 'es'), null); // ya está en español
+  assert.equal(languageChange(base, 'fr'), null); // idioma que no existe
+  assert.equal(DOPAMINE_MENU.en.length, DOPAMINE_MENU.es.length);
+});
+
+test('idioma: el contexto y el pedido a la IA en inglés', () => {
+  const w = new WorkContext();
+  w.update({ app: 'Visual Studio Code', title: 'engine.js — Foco' }, { now: 0, dt: 120 });
+  assert.match(w.summary(0, 'en')[0], /\(2 min, just now\)$/);
+  assert.match(w.summary(3 * 60_000, 'en')[0], /3 min ago\)$/);
+  assert.match(w.summary(0)[0], /recién\)$/);
+
+  const text = buildPrompt(
+    { trigger: { type: 'site', label: 'instagram.com' }, transcript: "I can't get the test to pass", flow: 'stuck' },
+    'en'
+  );
+  assert.match(text, /^What triggered the alert: Went to a site that distracts them: instagram\.com/);
+  assert.match(text, /What the person said: "I can't get the test to pass"/);
+  assert.match(text, /I'm stuck on something/);
+  assert.doesNotMatch(text, /Qué disparó/);
+  assert.match(buildPrompt({ trigger: { type: 'break_end', label: '' } }, 'en'), /struggling to get started$/m);
+});
+
+test('idioma: los textos del proceso principal tienen traducción', () => {
+  assert.equal(translate('en', 'Estás en {label}', { label: 'x.com' }), "You're on x.com");
+  assert.equal(translate('es', 'Estás en {label}', { label: 'x.com' }), 'Estás en x.com');
+  const code = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8').replace(/(^|\s)\/\/.*$/gm, '$1');
+  const used = [...code.matchAll(/\bt\(\s*'((?:\\.|[^'\\\n])*)'/g)].map((m) => m[1].replace(/\\(.)/g, '$1'));
+  assert.ok(used.length > 20);
+  assert.deepEqual(used.filter((s) => !EN_MAIN[s]), []);
+  // Ningún texto con tildes o signos del español quedó sin pasar por t()
+  const spanish = [...code.matchAll(/'((?:\\.|[^'\\\n])*)'|`([^`]*)`/g)]
+    .map((m) => (m[1] ?? m[2]).replace(/\\(.)/g, '$1'))
+    .filter((s) => /[áéíóúñ¿¡…]/i.test(s) && !EN_MAIN[s] && s !== '🌐 Español'); // el idioma se nombra en su idioma
+  assert.deepEqual(spanish, []);
+  for (const [es, en] of Object.entries(EN_MAIN)) {
+    const v = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');
+    assert.equal(v(es), v(en), `mismos {valores} en "${es}"`);
+  }
+});

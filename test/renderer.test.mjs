@@ -59,3 +59,75 @@ test('strategies: cada motivo tiene plan completo', () => {
   // ids únicos por flujo
   for (const list of Object.values(REASONS)) assert.equal(new Set(list.map((r) => r.id)).size, list.length);
 });
+
+test('strategies: en inglés cada motivo tiene plan completo', async () => {
+  const { reasonsFor } = await import('../renderer/lib/strategies.mjs');
+  for (const flow of Object.keys(REASONS)) {
+    const en = reasonsFor(flow, 'en');
+    assert.equal(en.length, REASONS[flow].length);
+    for (const r of en) {
+      const es = REASONS[flow].find((x) => x.id === r.id);
+      assert.notEqual(r.label, es.label, `${flow}:${r.id} label traducido`);
+      const p = rulePlan(flow, r.id, { task: 'the report', part: 'the intro' }, 'en');
+      assert.notEqual(p.reflection, rulePlan(flow, r.id, {}).reflection, `${flow}:${r.id} reflection traducida`);
+      assert.ok(p.micro_step.includes('the intro'), `${flow}:${r.id} micro usa la parte`);
+      assert.equal(p.sprint_minutes, es.minutes);
+      if (!p.suggestBreak) assert.equal(p.strategies.length, 3, `${flow}:${r.id} strategies`);
+    }
+  }
+  assert.match(rulePlan('stuck', 'start', {}, 'en').micro_step, /the task/);
+  assert.match(rulePlan('stuck', 'start', { triggerLabel: 'instagram.com' }, 'en').reward_idea, /^5 minutes of instagram\.com/);
+  assert.match(rulePlan('stuck', 'start', { part: 'the intro, because I have no idea' }, 'en').micro_step, /Open the intro and/);
+});
+
+// ---------- Idioma ----------
+
+import { readFileSync } from 'node:fs';
+import { t, setLang, EN } from '../renderer/lib/i18n.mjs';
+
+const read = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
+const vars = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');
+const unquote = (s) => s.replace(/\\(.)/g, '$1');
+const stripComments = (code) => code.replace(/(^|\s)\/\/.*$/gm, '$1');
+
+// Textos que se ven igual en los dos idiomas.
+const SAME = new Set(['Foco', '🎯 Foco', 'App', 'ES', 'EN', 'Español', 'English', '0 min', '09:00-13:00, 14:00-18:00', 'sk-ant-…', '…']);
+
+test('idioma: t() traduce, reemplaza valores y vuelve al español', () => {
+  setLang('en');
+  assert.equal(t('Estás en {label}', { label: 'instagram.com' }), "You're on instagram.com");
+  assert.equal(t('instagram.com'), 'instagram.com'); // lo que no está en el diccionario queda igual
+  setLang('es');
+  assert.equal(t('Estás en {label}', { label: 'instagram.com' }), 'Estás en instagram.com');
+  for (const [es, en] of Object.entries(EN)) assert.equal(vars(es), vars(en), `mismos {valores} en "${es}"`);
+});
+
+test('idioma: todos los textos fijos de las ventanas tienen traducción', () => {
+  const missing = [];
+  for (const file of ['panel', 'toast', 'coach', 'vision']) {
+    const html = read(`renderer/${file}.html`).replace(/<(style|script)[\s\S]*?<\/\1>/g, '').replace(/<!--[\s\S]*?-->/g, '');
+    const texts = [
+      ...[...html.matchAll(/>([^<]+)</g)].map((m) => m[1]),
+      ...[...html.matchAll(/\s(?:placeholder|title|aria-label)="([^"]+)"/g)].map((m) => m[1]),
+    ];
+    for (const raw of texts) {
+      const text = raw.replace(/\s+/g, ' ').trim();
+      if (/\p{L}/u.test(text) && !SAME.has(text) && !EN[text]) missing.push(`${file}.html: ${text}`);
+    }
+  }
+  assert.deepEqual(missing, []);
+});
+
+test('idioma: todos los textos de los scripts de las ventanas tienen traducción', () => {
+  const missing = [];
+  for (const file of ['renderer/panel.js', 'renderer/toast.js', 'renderer/coach.js', 'renderer/vision.js', 'renderer/lib/recorder.mjs']) {
+    const code = stripComments(read(file));
+    // Lo que pasa por t('…') y cualquier texto con tildes o signos del español.
+    const inT = [...code.matchAll(/\bt\(\s*'((?:\\.|[^'\\\n])*)'/g)].map((m) => unquote(m[1]));
+    const spanish = [...code.matchAll(/'((?:\\.|[^'\\\n])*)'|`([^`]*)`/g)]
+      .map((m) => unquote(m[1] ?? m[2]))
+      .filter((s) => /[áéíóúñ¿¡…]/i.test(s));
+    for (const s of new Set([...inT, ...spanish])) if (!EN[s] && !SAME.has(s)) missing.push(`${file}: ${s}`);
+  }
+  assert.deepEqual(missing, []);
+});

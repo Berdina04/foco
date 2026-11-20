@@ -1,10 +1,12 @@
 // Aviso flotante arriba a la derecha: te dice que estás fuera de foco, qué cree que te pasó
 // y te deja responder ahí mismo (botones, escribiendo o hablando) sin abrir la app.
 import { micButton } from './lib/recorder.mjs';
+import { t, setLang } from './lib/i18n.mjs';
 
 const api = window.foco;
 const card = document.getElementById('card');
 let p = await api.invoke('toast:context');
+if (p?.lang) setLang(p.lang);
 let draft = '';
 let writing = false;
 let recording = false;
@@ -40,42 +42,51 @@ function chime() {
       const g = ctx.createGain();
       o.frequency.value = f;
       o.type = 'sine';
-      const t = ctx.currentTime + i * 0.14;
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(0.12, t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+      const at = ctx.currentTime + i * 0.14;
+      g.gain.setValueAtTime(0, at);
+      g.gain.linearRampToValueAtTime(0.12, at + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, at + 0.5);
       o.connect(g).connect(ctx.destination);
-      o.start(t);
-      o.stop(t + 0.55);
+      o.start(at);
+      o.stop(at + 0.55);
     });
     setTimeout(() => ctx.close(), 1000);
   } catch {}
 }
 
+const out = (p) => t(p.escalated ? 'Seguís fuera de foco' : 'Fuera de foco');
 const HEAD = {
-  site: (p) => ['👀', p.escalated ? 'Seguís fuera de foco' : 'Fuera de foco', `Estás en ${p.label}`],
-  app: (p) => ['👀', p.escalated ? 'Seguís fuera de foco' : 'Fuera de foco', `Abriste ${p.label}`],
-  gaze: (p) => ['👀', p.escalated ? 'Seguís fuera de foco' : 'Fuera de foco', 'Hace un rato que no mirás la pantalla'],
-  drowsy: () => ['😴', 'Se te cierran los ojos', 'Forzar el foco con sueño rinde poco'],
-  stuck: () => ['🧱', '¿Te trabaste?', 'Hace unos minutos que mirás la pantalla sin tocar nada'],
-  hopping: () => ['🔀', '¿Buscando por dónde seguir?', 'Saltaste entre muchas ventanas en poco tiempo'],
-  manual: () => ['🎯', '¿Qué está pasando?', 'Contame y te ayudo'],
+  site: (p) => ['👀', out(p), t('Estás en {label}', { label: p.label })],
+  app: (p) => ['👀', out(p), t('Abriste {label}', { label: p.label })],
+  gaze: (p) => ['👀', out(p), t('Hace un rato que no mirás la pantalla')],
+  drowsy: () => ['😴', t('Se te cierran los ojos'), t('Forzar el foco con sueño rinde poco')],
+  stuck: () => ['🧱', t('¿Te trabaste?'), t('Hace unos minutos que mirás la pantalla sin tocar nada')],
+  hopping: () => ['🔀', t('¿Buscando por dónde seguir?'), t('Saltaste entre muchas ventanas en poco tiempo')],
+  manual: () => ['🎯', t('¿Qué está pasando?'), t('Contame y te ayudo')],
 };
 
 // Fin de sprint y fin de corte, según en qué parte de la charla estás.
 const MOMENT_HEAD = {
   sprint_end: {
-    ask: (m) => ['⏰', `¿Pudiste: ${m.goal}?`, `Terminó el sprint de ${m.minutes} min`],
-    done: (m) => ['🎉', '¡Bien ahí!', m.reward ? `Te ganaste: ${m.reward}` : 'Date un respiro antes de lo próximo.'],
-    partial: () => ['🙂', 'Avanzar es avanzar', '¿Seguimos un rato más con lo mismo, o ajustamos el paso?'],
-    stuck: (m) => ['🧱', '¿Dónde te trabaste?', `Ibas a: ${m.goal}`],
+    ask: (m) => ['⏰', t('¿Pudiste: {goal}?', { goal: m.goal }), t('Terminó el sprint de {minutes} min', { minutes: m.minutes })],
+    done: (m) => [
+      '🎉',
+      t('¡Bien ahí!'),
+      m.reward ? t('Te ganaste: {reward}', { reward: m.reward }) : t('Date un respiro antes de lo próximo.'),
+    ],
+    partial: () => ['🙂', t('Avanzar es avanzar'), t('¿Seguimos un rato más con lo mismo, o ajustamos el paso?')],
+    stuck: (m) => ['🧱', t('¿Dónde te trabaste?'), t('Ibas a: {goal}', { goal: m.goal })],
   },
   break_end: {
     ask: (m) =>
       m.firstThing
-        ? ['☕', `Volvamos: ${m.firstThing}`, 'Terminó el corte. Es lo que dejaste anotado para arrancar.']
-        : ['☕', 'Volvamos al foco', 'Terminó el corte. ¿Con qué arrancás?'],
-    stuck: (m) => ['😮‍💨', 'Cuesta volver, pasa', m.firstThing ? `Ibas a: ${m.firstThing}` : 'Contame qué te frena y lo vemos'],
+        ? ['☕', t('Volvamos: {first}', { first: m.firstThing }), t('Terminó el corte. Es lo que dejaste anotado para arrancar.')]
+        : ['☕', t('Volvamos al foco'), t('Terminó el corte. ¿Con qué arrancás?')],
+    stuck: (m) => [
+      '😮‍💨',
+      t('Cuesta volver, pasa'),
+      m.firstThing ? t('Ibas a: {goal}', { goal: m.firstThing }) : t('Contame qué te frena y lo vemos'),
+    ],
   },
 };
 
@@ -86,7 +97,7 @@ function render() {
   if (p.returned) {
     card.className = '';
     card.replaceChildren(
-      h('div', { class: 'head' }, h('span', { class: 'icon' }, '💪'), h('div', {}, h('h3', {}, '¡Bien, volviste!')))
+      h('div', { class: 'head' }, h('span', { class: 'icon' }, '💪'), h('div', {}, h('h3', {}, t('¡Bien, volviste!'))))
     );
     return;
   }
@@ -117,8 +128,8 @@ function render() {
       'div',
       { class: 'head' },
       h('span', { class: 'icon' }, icon),
-      h('div', {}, h('h3', {}, title), h('p', {}, sub), talking && p.work && h('p', {}, `Venías en: ${p.work}`)),
-      h('button', { class: 'x', title: 'Cerrar', onclick: () => api.invoke('toast:dismiss') }, '✕')
+      h('div', {}, h('h3', {}, title), h('p', {}, sub), talking && p.work && h('p', {}, t('Venías en: {work}', { work: p.work }))),
+      h('button', { class: 'x', title: t('Cerrar'), onclick: () => api.invoke('toast:dismiss') }, '✕')
     ),
     talking ? body() : momentBody(m),
     writing && tellBox(),
@@ -127,8 +138,8 @@ function render() {
       h(
         'div',
         { class: 'links' },
-        isScreen && h('a', { onclick: () => api.invoke('toast:allow') }, `Es por trabajo (${p.allowMinutes} min)`),
-        h('a', { onclick: () => api.invoke('toast:coach', {}) }, 'Abrir el coach')
+        isScreen && h('a', { onclick: () => api.invoke('toast:allow') }, t('Es por trabajo ({n} min)', { n: p.allowMinutes })),
+        h('a', { onclick: () => api.invoke('toast:coach', {}) }, t('Abrir el coach'))
       ),
   ];
   card.replaceChildren(...parts.flat().filter(Boolean));
@@ -141,7 +152,7 @@ function body() {
     return h(
       'div',
       { class: 'insight' },
-      h('div', { class: 'row-center' }, h('div', { class: 'spinner' }), p.screen ? 'Mirando en qué estabas…' : 'Pensando cómo ayudarte…')
+      h('div', { class: 'row-center' }, h('div', { class: 'spinner' }), t(p.screen ? 'Mirando en qué estabas…' : 'Pensando cómo ayudarte…'))
     );
   }
   if (p.ai && p.insightStatus === 'ready' && ins) {
@@ -149,15 +160,15 @@ function body() {
       h(
         'div',
         { class: 'insight' },
-        ins.working_on && h('div', { class: 'muted' }, `Estabas en: ${ins.working_on}`),
+        ins.working_on && h('div', { class: 'muted' }, t('Estabas en: {x}', { x: ins.working_on })),
         ins.likely_block && h('div', {}, ins.likely_block),
         h('div', { class: 'q' }, ins.question),
-        h('div', { class: 'step' }, `Próximo paso: ${ins.micro_step}`),
+        h('div', { class: 'step' }, t('Próximo paso: {x}', { x: ins.micro_step })),
         ins.strategies?.length &&
           h(
             'details',
             {},
-            h('summary', {}, 'Más ideas para destrabarte'),
+            h('summary', {}, t('Más ideas para destrabarte')),
             h('ul', {}, ins.strategies.map((s) => h('li', {}, h('b', {}, s.title), ': ', s.how)))
           )
       ),
@@ -165,25 +176,25 @@ function body() {
         'div',
         { class: 'actions' },
         ins.flow === 'tired'
-          ? btn('☕ Hacer un corte', () => api.invoke('toast:coach', { start: 'break' }), 'btn primary')
-          : btn(`▶ Arrancar ${ins.sprint_minutes} min`, () => api.invoke('toast:sprint'), 'btn primary'),
-        btn('🎤 No es eso, te cuento', null, 'btn mic'),
-        btn('Vuelvo al foco', () => api.invoke('toast:back'))
+          ? btn(t('☕ Hacer un corte'), () => api.invoke('toast:coach', { start: 'break' }), 'btn primary')
+          : btn(t('▶ Arrancar {n} min', { n: ins.sprint_minutes }), () => api.invoke('toast:sprint'), 'btn primary'),
+        btn(t('🎤 No es eso, te cuento'), null, 'btn mic'),
+        btn(t('Vuelvo al foco'), () => api.invoke('toast:back'))
       ),
     ];
   }
   // Sin IA (o falló): opciones rápidas. Si ya dijiste que te trabaste, lo primero es contarlo.
   const m = p.moment;
-  const back = btn('Vuelvo al foco', () => api.invoke('toast:back'), m ? 'btn' : 'btn primary');
-  const mic = btn('🎤 Contame qué pasa', null, m ? 'btn primary mic' : 'btn mic');
-  const coach = (label, start) => btn(label, () => api.invoke('toast:coach', { start }));
+  const back = btn(t('Vuelvo al foco'), () => api.invoke('toast:back'), m ? 'btn' : 'btn primary');
+  const mic = btn(t('🎤 Contame qué pasa'), null, m ? 'btn primary mic' : 'btn mic');
+  const coach = (label, start) => btn(t(label), () => api.invoke('toast:coach', { start }));
   return [
-    p.ai && p.insightStatus === 'error' && h('div', { class: 'note' }, `No pude analizarlo: ${p.insightError}`),
+    p.ai && p.insightStatus === 'error' && h('div', { class: 'note' }, t('No pude analizarlo: {error}', { error: p.insightError })),
     h(
       'div',
       { class: 'actions' },
       m ? [mic, back] : [back, mic],
-      p.ai && p.insightStatus === 'idle' && btn('🔎 ¿En qué me trabé?', () => api.invoke('toast:analyze'))
+      p.ai && p.insightStatus === 'idle' && btn(t('🔎 ¿En qué me trabé?'), () => api.invoke('toast:analyze'))
     ),
     h(
       'div',
@@ -192,7 +203,7 @@ function body() {
         ? [coach('🧱 Armar un plan', 'stuck'), coach('🔋 Un corte', 'break')]
         : [coach('🧱 Me trabé', 'stuck'), coach('😮‍💨 Me da fiaca', 'fiaca'), coach(m ? '🔋 Otro corte' : '🔋 Un corte', 'break')]
     ),
-    !p.ai && h('div', { class: 'note' }, 'Con la IA activada, Foco mira en qué estabas y te dice dónde te trabaste.'),
+    !p.ai && h('div', { class: 'note' }, t('Con la IA activada, Foco mira en qué estabas y te dice dónde te trabaste.')),
   ];
 }
 
@@ -202,18 +213,18 @@ function momentBody(m) {
     return h(
       'div',
       { class: 'actions' },
-      btn('🎉 ¡Lo hice!', () => api.invoke('toast:checkin', 'done'), 'btn primary'),
-      btn('🙂 Avancé', () => api.invoke('toast:checkin', 'partial')),
-      btn('🧱 Me trabé', () => api.invoke('toast:checkin', 'stuck'))
+      btn(t('🎉 ¡Lo hice!'), () => api.invoke('toast:checkin', 'done'), 'btn primary'),
+      btn(t('🙂 Avancé'), () => api.invoke('toast:checkin', 'partial')),
+      btn(t('🧱 Me trabé'), () => api.invoke('toast:checkin', 'stuck'))
     );
   }
   if (m.phase === 'done') {
-    if (stepOpen) return stepBox({ goal: '', minutes: 25, placeholder: '¿Qué sigue? Un paso concreto', focus: true });
+    if (stepOpen) return stepBox({ goal: '', minutes: 25, placeholder: t('¿Qué sigue? Un paso concreto'), focus: true });
     return h(
       'div',
       { class: 'actions' },
-      btn('🎁 Tomarme el premio (5 min)', () => api.invoke('toast:reward'), 'btn primary'),
-      btn('➡️ Otro sprint', () => {
+      btn(t('🎁 Tomarme el premio (5 min)'), () => api.invoke('toast:reward'), 'btn primary'),
+      btn(t('➡️ Otro sprint'), () => {
         stepOpen = true;
         render();
       })
@@ -221,18 +232,18 @@ function momentBody(m) {
   }
   if (m.phase === 'partial') return stepBox({ goal: m.goal, minutes: 15 });
   // Fin del corte
-  const hard = btn('😮‍💨 Me cuesta volver', () => api.invoke('toast:checkin', 'stuck'));
-  if (!m.firstThing) return stepBox({ goal: '', minutes: 25, placeholder: 'Ej: responder el mail de Ana', extra: hard });
+  const hard = btn(t('😮‍💨 Me cuesta volver'), () => api.invoke('toast:checkin', 'stuck'));
+  if (!m.firstThing) return stepBox({ goal: '', minutes: 25, placeholder: t('Ej: responder el mail de Ana'), extra: hard });
   return h(
     'div',
     { class: 'actions' },
-    btn('▶ Arrancar 25 min', () => api.invoke('toast:step', { goal: m.firstThing, minutes: 25 }), 'btn primary'),
+    btn(t('▶ Arrancar {n} min', { n: 25 }), () => api.invoke('toast:step', { goal: m.firstThing, minutes: 25 }), 'btn primary'),
     hard
   );
 }
 
 // Campo para el próximo paso y botón para arrancar el sprint.
-function stepBox({ goal, minutes, placeholder = 'Ej: escribir el primer párrafo', focus = false, extra }) {
+function stepBox({ goal, minutes, placeholder = t('Ej: escribir el primer párrafo'), focus = false, extra }) {
   const input = h('input', { type: 'text', placeholder });
   input.value = stepDraft ?? goal;
   const go = () => {
@@ -252,12 +263,12 @@ function stepBox({ goal, minutes, placeholder = 'Ej: escribir el primer párrafo
     'div',
     { class: 'stack', style: 'gap:6px' },
     input,
-    h('div', { class: 'actions' }, btn(`▶ Arrancar ${minutes} min`, go, 'btn primary'), extra)
+    h('div', { class: 'actions' }, btn(t('▶ Arrancar {n} min', { n: minutes }), go, 'btn primary'), extra)
   );
 }
 
 function tellBox() {
-  const ta = h('textarea', { placeholder: 'Contame qué te pasa…' });
+  const ta = h('textarea', { placeholder: t('Contame qué te pasa…') });
   ta.value = draft;
   ta.addEventListener('input', () => (draft = ta.value));
   ta.addEventListener('focus', () => setBusy(true));
@@ -274,9 +285,9 @@ function tellBox() {
     h(
       'div',
       { class: 'actions' },
-      btn('Enviar', send, 'btn primary'),
-      btn('🎤 Seguir hablando', null, 'btn mic'),
-      btn('Cancelar', () => {
+      btn(t('Enviar'), send, 'btn primary'),
+      btn(t('🎤 Seguir hablando'), null, 'btn mic'),
+      btn(t('Cancelar'), () => {
         writing = false;
         draft = '';
         render();
@@ -318,7 +329,7 @@ function levelBars(level) {
     const hgt = 4 + Math.max(0, level * 18 - Math.abs(i - 6) * 1.5);
     return h('i', { style: `height:${hgt}px` });
   });
-  el.replaceChildren(h('div', { class: 'row-center' }, h('div', { class: 'level' }, bars), 'Te escucho… tocá "Listo" al terminar'));
+  el.replaceChildren(h('div', { class: 'row-center' }, h('div', { class: 'level' }, bars), t('Te escucho… tocá "Listo" al terminar')));
 }
 
 function bindMic() {
@@ -335,7 +346,7 @@ function bindMic() {
           setBusy(true);
         }
         if (s === 'level') levelBars(extra);
-        if (s === 'transcribing') note('Pasando a texto lo que dijiste…');
+        if (s === 'transcribing') note(t('Pasando a texto lo que dijiste…'));
         if (s === 'error') note(extra);
         if (s === 'done' || s === 'error') {
           recording = false;
@@ -364,12 +375,18 @@ card.addEventListener('mouseleave', () => setBusy(false));
 new ResizeObserver(() => api.invoke('toast:resize', Math.ceil(card.offsetHeight + 20))).observe(card);
 
 api.on('toast:update', (next) => {
+  if (next.lang) setLang(next.lang);
   if ((recording || isTyping()) && next.id === p?.id && !next.returned) pending = next;
   else {
     p = next;
     render();
   }
 });
-api.on('voice:progress', (pct) => note(`Preparando la voz (sólo la primera vez): ${pct}%`));
+api.on('voice:progress', (pct) => note(t('Preparando la voz (sólo la primera vez): {pct}%', { pct })));
+// Cambio de idioma desde el panel o el menú: se redibuja (lo que estabas escribiendo se conserva).
+api.on('lang', (lang) => {
+  setLang(lang);
+  if (!recording) render();
+});
 
 render();
