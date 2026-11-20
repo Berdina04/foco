@@ -47,7 +47,7 @@ En el panel ves cuánto tiempo estuviste en foco, qué te frenó más durante el
 
 ## Cómo usarla
 
-Necesitás Node.js 22 o más nuevo.
+Necesitás una Mac (Foco usa APIs de macOS para leer la ventana activa y pedir permisos) y Node.js 22 o más nuevo. `npm install` también descarga el modelo de detección de cara (unos 4 MB).
 
 ```bash
 npm install
@@ -94,34 +94,57 @@ En modo desarrollo macOS muestra estos permisos a nombre de **"Electron"**. Desp
 - **Sensibilidad de la cámara**: si te avisa de más, bajala o recalibrá.
 - **Menú de dopamina**: editalo con lo que a vos te recarga de verdad.
 
-## Cómo está hecha
+## Desarrollo
+
+Electron sin frameworks ni paso de build: JavaScript plano, HTML y CSS. Si vas a tocar el código (vos o un agente de IA), leé primero [AGENTS.md](AGENTS.md): ahí están las convenciones, las reglas de privacidad que no se negocian y cómo verificar cada cambio. Las guías paso a paso para los cambios más comunes están en [`.claude/skills/`](.claude/skills/).
+
+### Cómo está hecha
 
 ```
-src/
-  main.js           Proceso principal: barra de menú, ventanas, loop cada 2 s, avisos, sprints y cortes
-  engine.js         Decide cuándo avisar (pantalla, mirada, cansancio, señales de bloqueo)
-  active-window.js  App al frente (lsappinfo) + URL del navegador y título de ventana (AppleScript)
-  context.js        Dónde venías trabajando, saltos entre ventanas, exclusiones
-  screenshot.js     Captura de la pantalla de trabajo (sólo en memoria)
-  ai-coach.js       Lectura de la traba y plan con Claude (capturas + contexto + lo que contaste)
-  voice.js          Voz a texto con Whisper, en tu Mac
-  classifier.js     ¿Es una distracción? (dominios, rutas, apps, permisos temporales)
-  schedule.js       Horario laboral por bloques
-  stats.js          Registro diario
-renderer/
-  toast.*           Aviso flotante arriba a la derecha
-  panel.*           Panel: Hoy + Ajustes
-  coach.*           El coach (preguntas, plan, cortes, respiración guiada, check-in)
-  vision.*          Cámara: MediaPipe Face Landmarker, ~5 análisis por segundo
-  lib/attention.mjs Pose de la cabeza + mirada → mirando / a otro lado / ojos cerrados / no está
-  lib/strategies.mjs Estrategias por tipo de traba o fiaca
-  lib/recorder.mjs  Grabación del micrófono a 16 kHz
+src/                    Proceso principal (Node, CommonJS)
+  main.js               Barra de menú, ventanas, loop cada 2 s, avisos, sprints, cortes e IPC
+  engine.js             Decide cuándo avisar (pantalla, mirada, cansancio, señales de bloqueo). Pura
+  classifier.js         ¿Es una distracción? (dominios, rutas, apps, permisos temporales). Pura
+  context.js            Dónde venías trabajando, saltos entre ventanas, exclusiones. Pura
+  schedule.js           Horario laboral por bloques. Pura
+  config.js             Ajustes por defecto y config.json con merge profundo
+  stats.js              Registro diario (un JSON por día)
+  active-window.js      App al frente (lsappinfo) + URL del navegador y título de ventana (AppleScript)
+  screenshot.js         Captura de la pantalla de trabajo (sólo en memoria)
+  ai-coach.js           Lectura de la traba y plan con Claude (capturas + contexto + lo que contaste)
+  voice.js              Voz a texto con Whisper, en tu Mac
+  preload.js            Puente window.foco: lista blanca de canales IPC
+renderer/               Ventanas (ES modules, sin bundler), servidas por el protocolo app://foco/
+  toast.*               Aviso flotante arriba a la derecha
+  panel.*               Panel: Hoy + Ajustes
+  coach.*               El coach (preguntas, plan, cortes, respiración guiada, check-in)
+  vision.*              Cámara: MediaPipe Face Landmarker, ~5 análisis por segundo
+  styles.css            Colores y componentes compartidos (claro y oscuro)
+  lib/attention.mjs     Pose de la cabeza + mirada → mirando / a otro lado / ojos cerrados / no está
+  lib/strategies.mjs    Estrategias por tipo de traba o fiaca (el plan sin IA)
+  lib/recorder.mjs      Grabación del micrófono a 16 kHz
+scripts/
+  smoke.js              Prueba de humo de punta a punta
+  download-model.js     Descarga models/face_landmarker.task
+test/                   node:test, sin dependencias extra
 ```
 
-```bash
-npm test        # lógica + pedido a la IA contra un servidor falso
-npm run smoke   # abre la app con datos temporales, recorre panel, coach y avisos (distracción, fin de sprint y de corte), y guarda capturas en smoke-output/
-```
+Cada 2 segundos `main.js` lee la ventana activa, la clasifica, actualiza el contexto de trabajo y le pasa todo a `FocusEngine.tick()`, que devuelve `nudge`, `coach`, `signal` o `none`. Según eso se abre el aviso flotante (o el coach, con el estilo "ventana") y, si la IA está activada, se le pide a Claude una lectura de la traba. La ventana de la cámara corre oculta y manda el estado de atención por IPC.
+
+### Comandos
+
+| Comando         | Qué hace                                                                                                             |
+| --------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `npm start`     | Abre la app.                                                                                                         |
+| `npm test`      | Lógica pura, cámara, estrategias y el pedido a la IA contra un servidor falso (no gasta ni necesita key).            |
+| `npm run smoke` | Abre la app con datos temporales, recorre panel, coach y avisos, y guarda capturas y textos en `smoke-output/`.      |
+| `npm run model` | Vuelve a bajar el modelo de detección de cara si falló en el `npm install`.                                          |
+
+### Variables de entorno
+
+- `ANTHROPIC_API_KEY`: si no cargaste una key en Ajustes, la IA usa esta.
+- `FOCO_NO_TICK=1`: arranca sin el loop de monitoreo (no lee ventanas ni pide permisos). La usa la prueba de humo.
+- `FOCO_SMOKE_WAV` y `FOCO_SMOKE_VOICE_CACHE`: opcionales, para que la prueba de humo transcriba un audio real con Whisper.
 
 ## Próximos pasos posibles
 
