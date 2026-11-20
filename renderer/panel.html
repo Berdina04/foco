@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    />
+    <title>Foco</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        background: var(--bg);
+        padding: 14px 28px 0 92px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        border-bottom: 1px solid var(--border);
+        -webkit-app-region: drag;
+      }
+      header .brand {
+        font-weight: 700;
+        font-size: 15px;
+        padding-bottom: 12px;
+      }
+      nav {
+        display: flex;
+        gap: 4px;
+      }
+      nav button {
+        -webkit-app-region: no-drag;
+        border: 0;
+        background: none;
+        padding: 6px 12px 12px;
+        cursor: pointer;
+        color: var(--muted);
+        font-weight: 600;
+        border-bottom: 2px solid transparent;
+      }
+      nav button.on {
+        color: var(--text);
+        border-bottom-color: var(--accent);
+      }
+      main {
+        padding: 24px 28px 40px;
+        max-width: 1040px;
+        margin: 0 auto;
+      }
+      section[hidden] {
+        display: none !important;
+      }
+      .hero {
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+      }
+      .hero .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .grid {
+        display: grid;
+        gap: 14px;
+      }
+      .tiles {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+      .two {
+        grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+        align-items: start;
+      }
+      @media (max-width: 860px) {
+        .tiles {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .two {
+          grid-template-columns: 1fr;
+        }
+      }
+      .tile .value {
+        font-size: 26px;
+        font-weight: 680;
+        letter-spacing: -0.02em;
+        font-variant-numeric: tabular-nums;
+      }
+      .tile .label {
+        color: var(--muted);
+        font-size: 12.5px;
+      }
+      .now-card {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+      }
+      .now-card .clock {
+        font-size: 34px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.02em;
+      }
+      .now-card.sprint {
+        border-color: var(--accent);
+        background: linear-gradient(0deg, var(--accent-soft), var(--surface) 70%);
+      }
+      .timeline {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .timeline li {
+        display: flex;
+        gap: 12px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 13.5px;
+      }
+      .timeline li:last-child {
+        border-bottom: 0;
+      }
+      .timeline time {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+        width: 44px;
+        flex-shrink: 0;
+      }
+      .bars {
+        display: flex;
+        gap: 8px;
+        align-items: flex-end;
+        height: 110px;
+      }
+      .bars .bar {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        height: 100%;
+        justify-content: flex-end;
+      }
+      .bars .fill {
+        width: 100%;
+        max-width: 34px;
+        border-radius: 6px 6px 3px 3px;
+        background: var(--accent);
+        min-height: 3px;
+      }
+      .bars .bar.today .fill {
+        background: var(--warn);
+      }
+      .bars span {
+        font-size: 11.5px;
+        color: var(--muted);
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 6px 14px;
+        font-size: 13.5px;
+      }
+      .kv dt {
+        color: var(--muted);
+      }
+      .kv dd {
+        margin: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .settings {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+      }
+      @media (max-width: 860px) {
+        .settings {
+          grid-template-columns: 1fr;
+        }
+      }
+      .days {
+        display: flex;
+        gap: 6px;
+      }
+      .days .chip {
+        width: 38px;
+        padding: 7px 0;
+        text-align: center;
+      }
+      .inline-num {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .inline-num input {
+        width: 80px;
+      }
+      .savebar {
+        position: sticky;
+        bottom: 0;
+        padding: 14px 0;
+        background: linear-gradient(transparent, var(--bg) 40%);
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        justify-content: flex-end;
+      }
+      .toast {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .empty {
+        color: var(--muted);
+        font-size: 13.5px;
+        padding: 6px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">🎯 Foco</div>
+      <nav>
+        <button data-tab="hoy" class="on">Hoy</button>
+        <button data-tab="ajustes">Ajustes</button>
+      </nav>
+    </header>
+
+    <main>
+      <!-- HOY -->
+      <section id="tab-hoy">
+        <div class="hero">
+          <div class="stack" style="gap: 6px">
+            <h1 id="headline">Foco</h1>
+            <div class="row">
+              <span id="status-pill" class="pill"><span class="dot"></span><span></span></span>
+              <span id="status-detail" class="muted small"></span>
+            </div>
+          </div>
+          <div class="spacer"></div>
+          <div class="actions">
+            <button id="btn-help" class="btn">🧱 Me trabé, ayudame</button>
+            <button id="btn-session" class="btn"></button>
+            <button id="btn-pause" class="btn"></button>
+          </div>
+        </div>
+
+        <div class="grid" style="margin-bottom: 14px">
+          <div id="now-card" class="card now-card"></div>
+        </div>
+
+        <div class="grid tiles" style="margin-bottom: 14px">
+          <div class="card tile"><div class="value" id="t-focus">0 min</div><div class="label">en foco hoy</div></div>
+          <div class="card tile"><div class="value" id="t-distracted">0 min</div><div class="label">distraído</div></div>
+          <div class="card tile"><div class="value" id="t-coach">0</div><div class="label">veces que te desviaste</div></div>
+          <div class="card tile"><div class="value" id="t-sprints">0</div><div class="label">sprints cumplidos</div></div>
+        </div>
+
+        <div class="grid two">
+          <div class="grid">
+            <div class="card stack">
+              <h3>Lo que aprendiste de vos hoy</h3>
+              <div id="insights" class="stack" style="gap: 8px"></div>
+            </div>
+            <div class="card stack">
+              <h3>Qué pasó hoy</h3>
+              <ul id="timeline" class="timeline"></ul>
+            </div>
+          </div>
+          <div class="grid">
+            <div class="card stack">
+              <h3>Ahora mismo</h3>
+              <dl class="kv">
+                <dt>App</dt>
+                <dd id="now-app">–</dd>
+                <dt>Pestaña</dt>
+                <dd id="now-url">–</dd>
+                <dt>Cámara</dt>
+                <dd id="now-cam">–</dd>
+              </dl>
+              <div class="row">
+                <button id="btn-camera-mini" class="btn primary" style="flex: 1">Cámara flotante</button>
+                <button id="btn-camera" class="btn" style="flex: 1">Calibrar</button>
+              </div>
+            </div>
+            <div class="card stack">
+              <h3>Últimos 7 días (min en foco)</h3>
+              <div id="week" class="bars"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- AJUSTES -->
+      <section id="tab-ajustes" hidden>
+        <div class="grid settings">
+          <div class="card stack">
+            <h2>Horario laboral</h2>
+            <p class="muted small">Fuera de este horario Foco no te molesta y la cámara se apaga.</p>
+            <div class="days" id="days"></div>
+            <label class="field">
+              Bloques
+              <input type="text" id="blocks" placeholder="09:00-13:00, 14:00-18:00" />
+              <span class="hint">Separados por coma. Ej: 09:00-13:00, 14:00-18:00</span>
+            </label>
+          </div>
+
+          <div class="card stack">
+            <h2>Avisos</h2>
+            <label class="field">
+              Avisar después de
+              <span class="inline-num"><input type="number" id="graceSeconds" min="0" max="600" /> segundos en una distracción</span>
+            </label>
+            <label class="check"><input type="checkbox" id="nudgeFirst" /> Primero un aviso suave y, si seguís, uno más insistente</label>
+            <label class="field">
+              Insistir si seguís
+              <span class="inline-num"><input type="number" id="nudgeToCoachSeconds" min="0" max="600" /> segundos después del primer aviso</span>
+            </label>
+            <label class="field">
+              "Es por trabajo" permite
+              <span class="inline-num"><input type="number" id="allowMinutes" min="1" max="480" /> minutos</span>
+            </label>
+            <label class="field">
+              Cómo te aviso
+              <select id="alertStyle">
+                <option value="toast">Aviso flotante arriba a la derecha (recomendado)</option>
+                <option value="window">Ventana grande del coach</option>
+              </select>
+            </label>
+            <label class="check"><input type="checkbox" id="alertSound" /> Con un sonido suave</label>
+            <label class="check"><input type="checkbox" id="systemNotification" /> Además, notificación del sistema</label>
+          </div>
+
+          <div class="card stack">
+            <h2>Sitios que distraen</h2>
+            <label class="field">
+              <textarea id="sites" rows="8"></textarea>
+              <span class="hint">Uno por línea. Podés poner una ruta: "youtube.com/shorts" bloquea Shorts pero no los tutoriales.</span>
+            </label>
+          </div>
+
+          <div class="card stack">
+            <h2>Apps que distraen</h2>
+            <label class="field">
+              <textarea id="apps" rows="8"></textarea>
+              <span class="hint">Nombre exacto de la app, uno por línea (como aparece en el Dock).</span>
+            </label>
+          </div>
+
+          <div class="card stack">
+            <h2>Cámara</h2>
+            <label class="check"><input type="checkbox" id="camEnabled" /> Usar la cámara para detectar si mirás la pantalla</label>
+            <label class="field">
+              Avisar si no mirás la pantalla durante
+              <span class="inline-num"><input type="number" id="gazeSeconds" min="5" max="600" /> segundos</span>
+            </label>
+            <label class="check"><input type="checkbox" id="requireIdle" /> Sólo si además no estás usando teclado ni mouse</label>
+            <label class="field">
+              Sugerir un corte si tenés los ojos cerrados
+              <span class="inline-num"><input type="number" id="drowsySeconds" min="2" max="120" /> segundos</span>
+            </label>
+            <label class="field">
+              Sensibilidad
+              <select id="sensitivity">
+                <option value="baja">Baja</option>
+                <option value="media">Media</option>
+                <option value="alta">Alta</option>
+              </select>
+            </label>
+            <button id="btn-camera-2" class="btn">Abrir cámara y calibrar</button>
+          </div>
+
+          <div class="card stack">
+            <h2>Menú de dopamina sana</h2>
+            <p class="muted small">Lo que el coach te ofrece cuando necesitás un corte. Cosas cortas que recargan sin engancharte.</p>
+            <textarea id="dopamine" rows="8"></textarea>
+          </div>
+
+          <div class="card stack">
+            <h2>Señales de bloqueo</h2>
+            <p class="muted small">Aunque no te vayas a ninguna distracción, Foco te pregunta si te trabaste cuando…</p>
+            <label class="field">
+              …mirás la pantalla sin tocar nada durante
+              <span class="inline-num"><input type="number" id="stareMinutes" min="0" max="60" /> minutos</span>
+              <span class="hint">0 = nunca. Necesita la cámara.</span>
+            </label>
+            <label class="check"><input type="checkbox" id="hopping" /> …saltás entre muchas ventanas o pestañas en poco tiempo</label>
+          </div>
+
+          <div class="card stack">
+            <h2>Hablar en vez de escribir</h2>
+            <label class="check"><input type="checkbox" id="voiceEnabled" /> Mostrar el botón 🎤 en el aviso y en el coach</label>
+            <p class="muted small">
+              Se pasa a texto en tu Mac con Whisper: el audio no sale de tu compu. La primera vez se descarga el modelo
+              (unos 250 MB).
+            </p>
+            <div class="row" style="flex-wrap: wrap">
+              <span id="voice-status" class="muted small"></span>
+              <div class="spacer"></div>
+              <button id="btn-voice" class="btn">Descargar ahora</button>
+              <button id="btn-mic" class="btn">Permiso de micrófono</button>
+            </div>
+          </div>
+
+          <div class="card stack" style="grid-column: 1 / -1">
+            <h2>Entender en qué te trabaste</h2>
+            <p class="muted small">
+              Cuando te vas a una distracción, Foco lo toma como una señal de que algo pasa: mira en qué estabas trabajando y
+              te dice dónde parece que te trabaste, sin que tengas que escribirlo.
+            </p>
+            <label class="check"><input type="checkbox" id="readTitles" /> Leer el título de la ventana en la que trabajás (queda en tu Mac)</label>
+            <label class="check">
+              <input type="checkbox" id="readScreen" /> Mandarle a la IA una captura de la pantalla en la que trabajabas (necesita la IA)
+            </label>
+            <p class="muted small">
+              La captura queda sólo en memoria, nunca se guarda en disco, y se manda únicamente cuando te distraés o aparece una
+              señal de bloqueo. Las apps y sitios de abajo nunca se capturan.
+            </p>
+            <div class="grid settings" style="gap: 10px">
+              <div class="row">
+                <span class="small">Accesibilidad (títulos):</span>
+                <b id="perm-accessibility" class="small"></b>
+                <div class="spacer"></div>
+                <button class="btn" data-perm="accessibility">Dar permiso</button>
+              </div>
+              <div class="row">
+                <span class="small">Grabación de pantalla (capturas):</span>
+                <b id="perm-screen" class="small"></b>
+                <div class="spacer"></div>
+                <button class="btn" data-perm="screen">Dar permiso</button>
+              </div>
+            </div>
+            <div class="grid settings" style="gap: 10px">
+              <label class="field">
+                Nunca leer estas apps
+                <textarea id="excludeApps" rows="3"></textarea>
+              </label>
+              <label class="field">
+                Ni estos sitios
+                <textarea id="excludeSites" rows="3"></textarea>
+                <span class="hint">Alcanza con una parte del dominio: "banco" cubre todos los homebanking.</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="card stack" style="grid-column: 1 / -1">
+            <h2>Coach con IA <span class="muted small" style="font-weight: 500">(opcional)</span></h2>
+            <p class="muted small">
+              Con IA, Foco entiende en qué te trabaste y arma el plan a medida. Se envía a Claude el texto de lo que contás, los
+              títulos de tus ventanas recientes y, si lo activaste arriba, la captura de la pantalla en la que trabajabas.
+              Nunca se envían imágenes de la cámara ni audio. Sin IA, el coach usa su biblioteca de estrategias.
+            </p>
+            <label class="check"><input type="checkbox" id="aiEnabled" /> Usar IA para armar los planes</label>
+            <div class="row" style="align-items: flex-end">
+              <label class="field" style="flex: 1">
+                API key de Claude
+                <input type="password" id="apiKey" placeholder="sk-ant-…" autocomplete="off" />
+              </label>
+              <button id="btn-key" class="btn">Guardar key</button>
+            </div>
+            <p id="key-status" class="muted small"></p>
+            <label class="field" style="max-width: 320px">
+              Modelo
+              <select id="aiModel">
+                <option value="claude-opus-5-5">Claude Opus 5.5 (mejor calidad)</option>
+                <option value="claude-sonnet-5-5">Claude Sonnet 5.5 (más rápido)</option>
+                <option value="claude-haiku-5-5">Claude Haiku 5.5 (más barato)</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="savebar">
+          <span id="toast" class="toast"></span>
+          <button id="btn-save" class="btn primary">Guardar cambios</button>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="panel.js"></script>
+  </body>
+</html>

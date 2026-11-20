@@ -1,0 +1,25 @@
+{
+  "name": "foco",
+  "version": "0.1.0",
+  "description": "App de escritorio que te ayuda a mantener el foco: detecta distracciones y te propone qué hacer en vez de retarte.",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.js test/*.test.mjs",
+    "model": "node scripts/download-model.js",
+    "postinstall": "node scripts/download-model.js",
+    "smoke": "electron scripts/smoke.js"
+  },
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.134.0",
+    "@huggingface/transformers": "^4.3.1",
+    "@mediapipe/tasks-vision": "^1.1.1"
+  },
+  "productName": "Foco",
+  "private": true,
+  "devDependencies": {
+    "electron": "^44.7.2"
+  }
+}

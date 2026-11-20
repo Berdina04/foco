@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; connect-src 'self' blob: data:; img-src 'self' blob: data:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline'"
+    />
+    <title>Cámara y calibración</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      main {
+        padding: 46px 24px 24px;
+        display: grid;
+        gap: 16px;
+      }
+      .stage {
+        position: relative;
+        border-radius: var(--radius);
+        overflow: hidden;
+        background: #000;
+        aspect-ratio: 4 / 3;
+        max-height: 360px;
+        margin: 0 auto;
+      }
+      .stage video,
+      .stage canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transform: scaleX(-1);
+      }
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+      }
+      .metric {
+        background: var(--surface-2);
+        border-radius: 10px;
+        padding: 8px 10px;
+      }
+      .metric b {
+        display: block;
+        font-size: 16px;
+        font-variant-numeric: tabular-nums;
+      }
+      .calib-count {
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* Lectura en vivo arriba del video */
+      .hud {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 10px;
+        pointer-events: none;
+      }
+      .hud-top {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .hud-btn {
+        display: none;
+        pointer-events: auto;
+        -webkit-app-region: no-drag;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        border: 0;
+        background: rgba(0, 0, 0, 0.55);
+        color: #fff;
+        cursor: pointer;
+        font-size: 13px;
+        line-height: 26px;
+        padding: 0;
+      }
+      .hud-btn:hover {
+        background: rgba(0, 0, 0, 0.8);
+      }
+      .hud-bottom {
+        background: rgba(0, 0, 0, 0.6);
+        color: #fff;
+        border-radius: 10px;
+        padding: 6px 10px;
+        font-size: 12px;
+        display: grid;
+        gap: 5px;
+      }
+      .hud-bottom[hidden] {
+        display: none;
+      }
+      .meter {
+        height: 4px;
+        border-radius: 2px;
+        background: rgba(255, 255, 255, 0.25);
+        overflow: hidden;
+      }
+      .meter[hidden] {
+        display: none;
+      }
+      .meter i {
+        display: block;
+        height: 100%;
+        width: 0;
+        background: #e0a15e;
+        transition: width 0.4s linear;
+      }
+      body:not(.mini) #hud-status {
+        display: none;
+      }
+
+      /* Modo flotante: sólo el video, siempre visible en una esquina */
+      body.mini {
+        background: #000;
+        overflow: hidden;
+      }
+      body.mini .drag,
+      body.mini #header,
+      body.mini .metrics,
+      body.mini .card {
+        display: none;
+      }
+      body.mini main {
+        padding: 0;
+        display: block;
+      }
+      body.mini .stage {
+        position: fixed;
+        inset: 0;
+        border-radius: 0;
+        max-height: none;
+        aspect-ratio: auto;
+        -webkit-app-region: drag;
+      }
+      body.mini .hud-btn {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="drag"></div>
+    <main>
+      <div class="row" id="header">
+        <div>
+          <h2>Cámara y calibración</h2>
+          <p class="muted small">Todo se procesa en tu Mac. No se graban ni se envían imágenes.</p>
+        </div>
+        <div class="spacer"></div>
+        <span id="status" class="pill"><span class="dot"></span><span>Iniciando…</span></span>
+        <button id="to-mini" class="btn">Cámara flotante</button>
+      </div>
+
+      <div class="stage">
+        <video id="video" playsinline muted></video>
+        <canvas id="canvas"></canvas>
+        <div class="hud">
+          <div class="hud-top">
+            <span id="hud-status" class="pill"><span class="dot"></span><span>Iniciando…</span></span>
+            <div class="spacer"></div>
+            <button id="hud-expand" class="hud-btn" title="Abrir grande y calibrar">⤢</button>
+            <button id="hud-close" class="hud-btn" title="Cerrar la cámara flotante">✕</button>
+          </div>
+          <div class="hud-bottom" id="hud-bottom" hidden>
+            <div id="hud-text"></div>
+            <div class="meter" id="hud-meter-wrap" hidden><i id="hud-meter"></i></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="metrics">
+        <div class="metric"><span class="muted small">Cabeza ↔</span><b id="m-yaw">–</b></div>
+        <div class="metric"><span class="muted small">Cabeza ↕</span><b id="m-pitch">–</b></div>
+        <div class="metric"><span class="muted small">Mirada</span><b id="m-gaze">–</b></div>
+        <div class="metric"><span class="muted small">Párpados</span><b id="m-blink">–</b></div>
+      </div>
+
+      <div class="card stack">
+        <h3>Calibrar</h3>
+        <p class="muted small">
+          Sentate como trabajás normalmente, mirá al centro de tu pantalla y apretá <b>Calibrar</b> (tarda 3 segundos).
+          Si usás más de un monitor, mirá el otro y apretá <b>Agregar otra pantalla</b>.
+        </p>
+        <div class="row">
+          <button id="calibrate" class="btn primary">Calibrar</button>
+          <button id="add-screen" class="btn">Agregar otra pantalla</button>
+          <button id="clear" class="btn ghost">Borrar calibración</button>
+          <div class="spacer"></div>
+          <span id="calib-info" class="muted small calib-count"></span>
+        </div>
+        <div class="row">
+          <label class="field" style="flex: 1">
+            Sensibilidad
+            <select id="sensitivity">
+              <option value="baja">Baja: sólo avisa si te das vuelta del todo</option>
+              <option value="media">Media</option>
+              <option value="alta">Alta: avisa ante desvíos chicos</option>
+            </select>
+          </label>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="vision.js"></script>
+  </body>
+</html>

@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' blob: mediastream:"
+    />
+    <title>Foco</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      body {
+        height: 100vh;
+        overflow-y: auto;
+      }
+      #app {
+        padding: 48px 32px 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        min-height: 100%;
+      }
+      .eyebrow {
+        font-size: 12px;
+        font-weight: 650;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--accent);
+      }
+      .lead {
+        color: var(--muted);
+        font-size: 15px;
+      }
+      .task-chip {
+        align-self: flex-start;
+        background: var(--surface-2);
+        border-radius: 8px;
+        padding: 4px 10px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .options {
+        display: grid;
+        gap: 10px;
+      }
+      .option {
+        display: flex;
+        gap: 14px;
+        align-items: center;
+        text-align: left;
+        width: 100%;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 14px 16px;
+        cursor: pointer;
+        transition: border-color 0.15s, background 0.15s, transform 0.05s;
+      }
+      .option:hover {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+      .option:active {
+        transform: translateY(1px);
+      }
+      .option.on {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+        box-shadow: inset 0 0 0 1px var(--accent);
+      }
+      .option .emoji {
+        font-size: 24px;
+        width: 32px;
+        text-align: center;
+      }
+      .option b {
+        display: block;
+        font-size: 15px;
+      }
+      .option span.sub {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .footer {
+        margin-top: auto;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding-top: 8px;
+      }
+      .reflection {
+        border-left: 3px solid var(--accent);
+        padding: 4px 0 4px 14px;
+        font-size: 15px;
+      }
+      .strategy {
+        display: grid;
+        gap: 2px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: var(--surface-2);
+      }
+      .strategy b {
+        font-size: 14px;
+      }
+      .strategy span {
+        color: var(--muted);
+        font-size: 13.5px;
+      }
+      .ai-note {
+        font-size: 12.5px;
+        color: var(--muted);
+      }
+      .steps {
+        display: flex;
+        gap: 6px;
+      }
+      .steps i {
+        width: 22px;
+        height: 4px;
+        border-radius: 2px;
+        background: var(--border);
+      }
+      .steps i.on {
+        background: var(--accent);
+      }
+      .breath {
+        display: grid;
+        place-items: center;
+        gap: 18px;
+        padding: 18px 0;
+      }
+      .breath .circle {
+        width: 180px;
+        height: 180px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 35%, var(--accent-soft), var(--accent));
+        transform: scale(0.55);
+        transition-property: transform;
+        transition-timing-function: ease-in-out;
+        opacity: 0.9;
+      }
+      .breath .label {
+        font-size: 20px;
+        font-weight: 600;
+      }
+      .big-emoji {
+        font-size: 44px;
+      }
+      .mic-row {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+      }
+      .mic-row > :first-child {
+        flex: 1;
+      }
+      .btn.mic {
+        padding: 8px 11px;
+        flex-shrink: 0;
+      }
+      .btn.recording {
+        background: var(--danger);
+        border-color: var(--danger);
+        color: #fff;
+      }
+      .spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid var(--border);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="drag"></div>
+    <div id="app"></div>
+    <script type="module" src="coach.js"></script>
+  </body>
+</html>

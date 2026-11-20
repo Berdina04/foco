@@ -1,0 +1,4 @@
+node_modules/
+models/*.task
+.DS_Store
+smoke-output/
